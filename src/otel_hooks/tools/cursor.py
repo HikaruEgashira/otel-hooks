@@ -4,12 +4,12 @@ Reference:
   - https://cursor.com/ja/docs/agent/hooks
 """
 
-import json
 import os
 from pathlib import Path
 from typing import Any, Dict
 
 from . import Scope, register_tool
+from .json_io import load_json, save_json
 
 HOOK_COMMAND = "otel-hooks hook"
 
@@ -27,21 +27,10 @@ class CursorConfig:
         return Path.cwd() / ".cursor" / "hooks.json"
 
     def load_settings(self, scope: Scope) -> Dict[str, Any]:
-        path = self.settings_path(scope)
-        if not path.exists():
-            return {}
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_json(self.settings_path(scope))
 
     def save_settings(self, settings: Dict[str, Any], scope: Scope) -> None:
-        path = self.settings_path(scope)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        try:
-            os.write(fd, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-        finally:
-            os.close(fd)
-        tmp.replace(path)
+        save_json(self.settings_path(scope), settings)
 
     def is_hook_registered(self, settings: Dict[str, Any]) -> bool:
         stop_hooks = settings.get("hooks", {}).get("stop", [])

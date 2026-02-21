@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from otel_hooks.hook import Turn
+from otel_hooks.domain.transcript import Turn
 
 
 @runtime_checkable

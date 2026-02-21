@@ -1,5 +1,7 @@
 """Tool configuration registry for multi-tool support."""
 
+import importlib
+import pkgutil
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Protocol, runtime_checkable
@@ -28,10 +30,10 @@ class ToolConfig(Protocol):
     def is_enabled(self, settings: Dict[str, Any]) -> bool: ...
 
 
-TOOL_REGISTRY: Dict[str, type] = {}
+TOOL_REGISTRY: Dict[str, type[ToolConfig]] = {}
 
 
-def register_tool(cls: type) -> type:
+def register_tool(cls: type[ToolConfig]) -> type[ToolConfig]:
     """Class decorator to register a tool config."""
     instance = cls()
     TOOL_REGISTRY[instance.name] = cls
@@ -49,18 +51,15 @@ def get_tool(name: str) -> ToolConfig:
 def available_tools() -> list[str]:
     """Return names of all registered tools."""
     _ensure_registered()
-    return list(TOOL_REGISTRY.keys())
+    return sorted(TOOL_REGISTRY.keys())
 
 
 def _ensure_registered() -> None:
     """Import all tool modules to trigger @register_tool decorators."""
-    if len(TOOL_REGISTRY) >= 8:
+    if TOOL_REGISTRY:
         return
-    from . import claude as _claude  # noqa: F811,F401
-    from . import cursor as _cursor  # noqa: F401
-    from . import codex as _codex  # noqa: F401
-    from . import opencode as _opencode  # noqa: F401
-    from . import copilot as _copilot  # noqa: F401
-    from . import gemini as _gemini  # noqa: F401
-    from . import kiro as _kiro  # noqa: F401
-    from . import cline as _cline  # noqa: F401
+    package_name = __name__
+    for module in pkgutil.iter_modules(__path__):
+        if module.name.startswith("_") or module.name in {"json_io"}:
+            continue
+        importlib.import_module(f"{package_name}.{module.name}")

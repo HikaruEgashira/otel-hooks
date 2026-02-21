@@ -10,7 +10,7 @@ Merge order: global → project → environment variables (highest priority).
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .tools import Scope
 
@@ -73,6 +73,10 @@ def load_config() -> Dict[str, Any]:
 
     return merged
 
+
+def load_raw_config(scope: Scope) -> Dict[str, Any]:
+    """Load config for a specific scope without merge/env overrides."""
+    return _read_json(config_path(scope))
 
 
 def _apply_env_overrides(merged: Dict[str, Any]) -> None:

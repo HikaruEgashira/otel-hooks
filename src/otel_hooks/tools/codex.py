@@ -15,8 +15,6 @@ import base64
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import tomli_w
-
 from . import Scope, register_tool
 
 CONFIG_PATH = Path.home() / ".codex" / "config.toml"
@@ -30,6 +28,8 @@ def _read_toml(path: Path) -> Dict[str, Any]:
 
 
 def _write_toml(data: Dict[str, Any], path: Path) -> None:
+    import tomli_w
+
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_bytes(tomli_w.dumps(data).encode("utf-8"))

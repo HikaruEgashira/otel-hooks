@@ -2,7 +2,6 @@
 
 import argparse
 import getpass
-import os
 import sys
 from importlib.metadata import version
 
@@ -11,7 +10,7 @@ from .tools import Scope, available_tools, get_tool, ToolConfig
 
 
 PROVIDERS = ["langfuse", "otlp", "datadog"]
-TOOLS = ["claude", "cursor", "codex", "opencode", "copilot", "gemini", "kiro", "cline"]
+TOOLS = available_tools()
 TOOL_CHOICES = [*TOOLS, "all"]
 
 
@@ -78,11 +77,11 @@ def _resolve_provider(args: argparse.Namespace) -> str:
 def _add_scope_flags(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--global", dest="global_", action="store_true",
-                       help="Write to ~/.claude/settings.json")
+                       help="Use global scope")
     group.add_argument("--project", action="store_true",
-                       help="Write to .claude/settings.json (shared with team)")
+                       help="Use project scope")
     group.add_argument("--local", action="store_true",
-                       help="Write to .claude/settings.local.json")
+                       help="Use local scope")
 
 
 def _add_tool_flag(parser: argparse.ArgumentParser) -> None:
@@ -109,6 +108,9 @@ def _enable_codex(args: argparse.Namespace) -> int:
         endpoint = input("  OTEL_EXPORTER_OTLP_ENDPOINT: ").strip()
         headers = input("  OTEL_EXPORTER_OTLP_HEADERS (k=v,k=v): ").strip()
         cfg = codex.enable_otlp(cfg, endpoint, headers)
+    else:
+        print(f"Provider '{provider}' is not supported for codex. Use langfuse or otlp.")
+        return 1
 
     codex.save_settings(cfg, Scope.GLOBAL)
     print(f"Enabled. Settings written to {codex.settings_path(Scope.GLOBAL)}")
@@ -133,7 +135,7 @@ def _enable_one(tool_name: str, args: argparse.Namespace) -> int:
 
     # Write provider config to otel-hooks config (shared across all tools)
     config_scope = Scope.PROJECT if scope is Scope.PROJECT else Scope.GLOBAL
-    otel_cfg = cfg._read_json(cfg.config_path(config_scope))
+    otel_cfg = cfg.load_raw_config(config_scope)
     otel_cfg["provider"] = provider
     otel_cfg["enabled"] = True
 
@@ -188,7 +190,7 @@ def cmd_disable(args: argparse.Namespace) -> int:
     # Update otel-hooks config
     if tools:
         config_scope = Scope.PROJECT if getattr(args, "project", False) else Scope.GLOBAL
-        otel_cfg = cfg._read_json(cfg.config_path(config_scope))
+        otel_cfg = cfg.load_raw_config(config_scope)
         otel_cfg["enabled"] = False
         cfg.save_config(otel_cfg, config_scope)
 
@@ -279,7 +281,7 @@ def _doctor_one(tool_name: str, args: argparse.Namespace) -> int:
 
     # Fix otel-hooks config
     config_scope = Scope.PROJECT if getattr(args, "project", False) else Scope.GLOBAL
-    otel_cfg = cfg._read_json(cfg.config_path(config_scope))
+    otel_cfg = cfg.load_raw_config(config_scope)
     otel_cfg["enabled"] = True
 
     if not provider:
@@ -367,3 +369,7 @@ def main() -> None:
         "version": lambda _: print(version("otel-hooks")) or 0,
     }
     sys.exit(commands[args.command](args))
+
+
+if __name__ == "__main__":
+    main()
