@@ -3,15 +3,13 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/HikaruEgashira/cc-tracing-hooks/badge)](https://scorecard.dev/viewer/?uri=github.com/HikaruEgashira/cc-tracing-hooks)
 [![PyPI](https://img.shields.io/pypi/v/cc-tracing-hooks)](https://pypi.org/project/cc-tracing-hooks/)
 
-Claude Code の全セッションを [Langfuse](https://langfuse.com) にトレースする hooks プラグイン。
+Send Claude Code session traces to [Langfuse](https://langfuse.com).
 
 ## Install
 
 ```bash
 mise use -g pipx:cc-tracing-hooks
 ```
-
-or
 
 ```bash
 pip install cc-tracing-hooks
@@ -20,28 +18,22 @@ pip install cc-tracing-hooks
 ## Usage
 
 ```bash
-# Langfuse の接続情報を対話的に設定し、hooks を有効化
-cc-tracing-hooks enable
+cc-tracing-hooks enable          # configure Langfuse credentials and register the hook
+cc-tracing-hooks enable --global # write to ~/.claude/settings.json
+cc-tracing-hooks enable --local  # write to .claude/settings.local.json
 
-# 現在の設定を確認
-cc-tracing-hooks status
-
-# 設定の問題を検出・自動修復
-cc-tracing-hooks doctor
-
-# hooks を無効化
-cc-tracing-hooks disable
+cc-tracing-hooks status          # show configuration for both scopes
+cc-tracing-hooks doctor          # detect and fix issues
+cc-tracing-hooks disable         # remove the hook
 ```
 
 ## How it works
 
-`enable` は以下を行います:
+`enable` registers a [Stop hook](https://docs.anthropic.com/en/docs/claude-code/hooks) that runs `cc-tracing-hooks hook` after each Claude Code response. The hook reads the session transcript incrementally and emits traces to Langfuse.
 
-1. `~/.claude/hooks/langfuse_hook.py` にシンボリックリンクを作成
-2. `~/.claude/settings.json` の `hooks.Stop` にフックを登録
-3. Langfuse の環境変数 (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`) を設定
-
-Claude Code のセッション終了時にフックが起動し、トランスクリプトを差分読み取りして Langfuse にトレースを送信します。
+`--global` writes to `~/.claude/settings.json` (applies to all projects).
+`--local` writes to `.claude/settings.local.json` (current project only).
+When neither flag is given, you are prompted to choose.
 
 ## Environment variables
 
@@ -50,8 +42,8 @@ Claude Code のセッション終了時にフックが起動し、トランス�
 | `LANGFUSE_PUBLIC_KEY` | Langfuse public key |
 | `LANGFUSE_SECRET_KEY` | Langfuse secret key |
 | `LANGFUSE_BASE_URL` | Langfuse host (default: `https://cloud.langfuse.com`) |
-| `CC_LANGFUSE_DEBUG` | `true` でデバッグログを有効化 |
-| `CC_LANGFUSE_MAX_CHARS` | トランスクリプトの最大文字数 (default: `20000`) |
+| `CC_LANGFUSE_DEBUG` | Set `true` to enable debug logging |
+| `CC_LANGFUSE_MAX_CHARS` | Truncation limit per message (default: `20000`) |
 
 ## License
 
