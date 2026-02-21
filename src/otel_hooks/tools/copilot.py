@@ -11,7 +11,7 @@ Reference:
 from pathlib import Path
 from typing import Any, Dict
 
-from . import Scope, register_tool
+from . import HookEvent, Scope, register_tool
 from .json_io import load_json, save_json
 
 HOOK_COMMAND = "otel-hooks hook"
@@ -66,3 +66,9 @@ class CopilotConfig:
         if not settings["hooks"]["sessionEnd"]:
             del settings["hooks"]["sessionEnd"]
         return settings
+
+    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
+        # Copilot uses camelCase toolName; no public session_id
+        if "toolName" not in payload and "toolResult" not in payload:
+            return None
+        return None

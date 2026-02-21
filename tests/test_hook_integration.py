@@ -16,7 +16,7 @@ class _StubProvider:
         self.flush_called = False
         self.shutdown_called = False
 
-    def emit_turn(self, session_id: str, turn_num: int, turn, transcript_path: Path) -> None:
+    def emit_turn(self, session_id: str, turn_num: int, turn, transcript_path: Path | None, source_tool: str = "") -> None:
         self.emitted.append((session_id, turn_num))
 
     def flush(self) -> None:

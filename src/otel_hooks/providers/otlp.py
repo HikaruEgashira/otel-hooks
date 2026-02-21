@@ -23,18 +23,22 @@ class OTLPProvider:
         self._provider = provider
         self._tracer = provider.get_tracer("otel-hooks")
 
-    def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path) -> None:
+    def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path | None, source_tool: str = "") -> None:
         payload = build_turn_payload(turn)
+        attrs: dict[str, str | int] = {
+            "session.id": session_id,
+            "gen_ai.system": "otel-hooks",
+            "gen_ai.request.model": payload.model,
+            "gen_ai.prompt": payload.user_text,
+            "gen_ai.completion": payload.assistant_text,
+        }
+        if transcript_path is not None:
+            attrs["transcript_path"] = str(transcript_path)
+        if source_tool:
+            attrs["source_tool"] = source_tool
         with self._tracer.start_as_current_span(
             f"AI Session - Turn {turn_num}",
-            attributes={
-                "session.id": session_id,
-                "gen_ai.system": "otel-hooks",
-                "gen_ai.request.model": payload.model,
-                "gen_ai.prompt": payload.user_text,
-                "gen_ai.completion": payload.assistant_text,
-                "transcript_path": str(transcript_path),
-            },
+            attributes=attrs,
         ):
             with self._tracer.start_as_current_span(
                 "Assistant Response",

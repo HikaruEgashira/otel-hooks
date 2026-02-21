@@ -8,7 +8,7 @@ Reference:
 from pathlib import Path
 from typing import Any, Dict
 
-from . import Scope, register_tool
+from . import HookEvent, Scope, register_tool
 from .json_io import load_json, save_json
 
 HOOK_COMMAND = "otel-hooks hook"
@@ -58,3 +58,7 @@ class OpenCodeConfig:
         if not settings["experimental"]["hook"]["session_completed"]:
             del settings["experimental"]["hook"]["session_completed"]
         return settings
+
+    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
+        # OpenCode hook compat is under development; no stable payload format yet
+        return None

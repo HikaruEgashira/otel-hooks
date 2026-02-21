@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from langfuse import Langfuse, propagate_attributes
 
@@ -14,8 +15,18 @@ class LangfuseProvider:
     def __init__(self, public_key: str, secret_key: str, host: str) -> None:
         self._langfuse = Langfuse(public_key=public_key, secret_key=secret_key, host=host)
 
-    def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path) -> None:
+    def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path | None, source_tool: str = "") -> None:
         payload = build_turn_payload(turn)
+        metadata: dict[str, Any] = {
+            "source": "otel-hooks",
+            "session_id": session_id,
+            "turn_number": turn_num,
+            "user_text": payload.user_text_meta,
+        }
+        if transcript_path is not None:
+            metadata["transcript_path"] = str(transcript_path)
+        if source_tool:
+            metadata["source_tool"] = source_tool
         with propagate_attributes(
             session_id=session_id,
             trace_name=f"AI Session - Turn {turn_num}",
@@ -24,13 +35,7 @@ class LangfuseProvider:
             with self._langfuse.start_as_current_span(
                 name=f"AI Session - Turn {turn_num}",
                 input={"role": "user", "content": payload.user_text},
-                metadata={
-                    "source": "otel-hooks",
-                    "session_id": session_id,
-                    "turn_number": turn_num,
-                    "transcript_path": str(transcript_path),
-                    "user_text": payload.user_text_meta,
-                },
+                metadata=metadata,
             ) as trace_span:
                 with self._langfuse.start_as_current_observation(
                     name="Assistant Response",

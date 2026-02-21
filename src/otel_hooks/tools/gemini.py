@@ -10,7 +10,7 @@ Reference:
 from pathlib import Path
 from typing import Any, Dict
 
-from . import Scope, register_tool
+from . import HookEvent, Scope, _extract_transcript_path, register_tool
 from .json_io import load_json, save_json
 
 HOOK_COMMAND = "otel-hooks hook"
@@ -70,3 +70,14 @@ class GeminiConfig:
         if not settings["hooks"]["SessionEnd"]:
             del settings["hooks"]["SessionEnd"]
         return settings
+
+    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
+        # Gemini uses session_id like Claude but transcript_path is always empty
+        session_id = payload.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            return None
+        # Distinguish from Claude: Gemini payloads have timestamp field
+        if "timestamp" not in payload:
+            return None
+        tp = _extract_transcript_path(payload)
+        return HookEvent(source_tool=self.name, session_id=session_id, transcript_path=tp or None)

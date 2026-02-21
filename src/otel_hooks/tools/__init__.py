@@ -1,16 +1,26 @@
 """Tool configuration registry for multi-tool support."""
 
+from __future__ import annotations
+
 import importlib
 import pkgutil
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Protocol, runtime_checkable
+from typing import Any, Callable, Dict, Protocol, runtime_checkable
 
 
 class Scope(str, Enum):
     GLOBAL = "global"
     PROJECT = "project"
     LOCAL = "local"
+
+
+@dataclass(frozen=True)
+class HookEvent:
+    source_tool: str
+    session_id: str
+    transcript_path: Path | None
 
 
 @runtime_checkable
@@ -28,6 +38,7 @@ class ToolConfig(Protocol):
     def scopes(self) -> list[Scope]: ...
     def is_hook_registered(self, settings: Dict[str, Any]) -> bool: ...
     def is_enabled(self, settings: Dict[str, Any]) -> bool: ...
+    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None: ...
 
 
 TOOL_REGISTRY: Dict[str, type[ToolConfig]] = {}
@@ -63,3 +74,43 @@ def _ensure_registered() -> None:
         if module.name.startswith("_") or module.name in {"json_io"}:
             continue
         importlib.import_module(f"{package_name}.{module.name}")
+
+
+# Tools with more specific payload matching should be tried first.
+# Claude matches broadly on session_id, so more specific tools go first.
+_PARSE_ORDER: tuple[str, ...] = ("cursor", "gemini", "cline", "codex", "claude")
+
+
+def parse_hook_event(
+    payload: Dict[str, Any], warn_fn: Callable[[str], None] | None = None
+) -> HookEvent | None:
+    """Parse tool payload into a normalized HookEvent via registered adapters."""
+    _ensure_registered()
+    seen: set[str] = set()
+    for name in _PARSE_ORDER:
+        if name in TOOL_REGISTRY:
+            seen.add(name)
+            event = TOOL_REGISTRY[name]().parse_event(payload)
+            if event is not None:
+                return event
+    for name, cls in TOOL_REGISTRY.items():
+        if name not in seen:
+            event = cls().parse_event(payload)
+            if event is not None:
+                return event
+    return None
+
+
+def _extract_transcript_path(payload: Dict[str, Any]) -> Path | None:
+    """Shared helper: extract transcript path from common payload keys."""
+    transcript = (
+        payload.get("transcriptPath")
+        or payload.get("transcript_path")
+        or payload.get("transcript", {}).get("path")
+    )
+    if not transcript:
+        return None
+    try:
+        return Path(transcript).expanduser().resolve()
+    except Exception:
+        return None

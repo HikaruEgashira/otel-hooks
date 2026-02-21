@@ -32,7 +32,6 @@ src/otel_hooks/
 │   ├── copilot.py
 │   ├── kiro.py
 │   └── opencode.py
-└── adapters/           # (empty — hook_payload.py removed)
 ```
 
 ## Key Interfaces

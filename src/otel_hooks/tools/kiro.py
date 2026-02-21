@@ -10,7 +10,7 @@ Reference:
 from pathlib import Path
 from typing import Any, Dict
 
-from . import Scope, register_tool
+from . import HookEvent, Scope, register_tool
 from .json_io import load_json, save_json
 
 HOOK_COMMAND = "otel-hooks hook"
@@ -62,3 +62,10 @@ class KiroConfig:
         if not settings["hooks"]["stop"]:
             del settings["hooks"]["stop"]
         return settings
+
+    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
+        # Kiro has minimal payload; no session_id in current spec
+        if payload.get("hook_event_name") and "tool_name" in payload:
+            if "sessionId" not in payload and "session_id" not in payload and "conversation_id" not in payload:
+                return None
+        return None

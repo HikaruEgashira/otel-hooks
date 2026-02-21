@@ -17,24 +17,26 @@ class DatadogProvider:
         if env:
             tracer.set_tags({"env": env})
 
-    def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path) -> None:
+    def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path | None, source_tool: str = "") -> None:
         payload = build_turn_payload(turn)
+        tags: dict[str, str] = {
+            "session.id": session_id,
+            "gen_ai.system": "otel-hooks",
+            "gen_ai.request.model": payload.model,
+            "gen_ai.prompt": payload.user_text,
+            "gen_ai.completion": payload.assistant_text,
+        }
+        if transcript_path is not None:
+            tags["transcript_path"] = str(transcript_path)
+        if source_tool:
+            tags["source_tool"] = source_tool
         with tracer.trace(
             "ai_session.turn",
             resource=f"Turn {turn_num}",
             service="otel-hooks",
             span_type="llm",
         ) as root_span:
-            root_span.set_tags(
-                {
-                    "session.id": session_id,
-                    "gen_ai.system": "otel-hooks",
-                    "gen_ai.request.model": payload.model,
-                    "gen_ai.prompt": payload.user_text,
-                    "gen_ai.completion": payload.assistant_text,
-                    "transcript_path": str(transcript_path),
-                }
-            )
+            root_span.set_tags(tags)
 
             with tracer.trace(
                 "ai_session.generation",

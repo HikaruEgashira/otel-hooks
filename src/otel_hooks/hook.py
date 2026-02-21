@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from otel_hooks.adapters.hook_payload import parse_hook_event
+from otel_hooks.tools import parse_hook_event
 from otel_hooks.domain.transcript import build_turns, decode_jsonl_lines
 from otel_hooks.providers.factory import create_provider
 from otel_hooks.runtime.state import (
@@ -95,8 +95,16 @@ def run_hook(
 
     event = parse_hook_event(payload, warn_fn=warn)
 
-    if event is None or not event.transcript_path.exists():
-        debug("Missing session_id/transcript_path or transcript not found; exiting.")
+    if event is None:
+        debug("No matching adapter for payload; exiting.")
+        return 0
+
+    if event.transcript_path is not None and not event.transcript_path.exists():
+        debug("Transcript file not found; exiting.")
+        return 0
+
+    if event.transcript_path is None:
+        debug(f"No transcript path for {event.source_tool}; session-only trace not yet supported.")
         return 0
 
     emitted = 0
@@ -123,7 +131,7 @@ def run_hook(
                 emitted += 1
                 turn_num = ss.turn_count + emitted
                 try:
-                    provider.emit_turn(event.session_id, turn_num, turn, event.transcript_path)
+                    provider.emit_turn(event.session_id, turn_num, turn, event.transcript_path, event.source_tool)
                 except Exception as e:
                     debug(f"emit_turn failed: {e}")
 
