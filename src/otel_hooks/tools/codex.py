@@ -130,7 +130,7 @@ class CodexConfig:
         return settings
 
     def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
-        # Codex uses notify with thread-id; hooks not yet implemented
+        # Codex natively exports OTel events (input/output/tool traces) via its own exporter.
         thread_id = payload.get("thread-id")
         if not isinstance(thread_id, str) or not thread_id:
             return None
