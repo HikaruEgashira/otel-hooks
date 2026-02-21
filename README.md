@@ -42,12 +42,9 @@ otel-hooks disable --tool <name>
 
 ## How it works
 
-`enable` registers tool-specific integration that runs `otel-hooks hook`. Trace-capable tools provide transcript/event data for turn reconstruction. Metrics-only tools emit coarse hook events (prompt/tool/session level). Provider settings are stored in a unified otel-hooks config file, shared across all tools. Codex CLI uses native OTLP support instead of hooks.
+`enable` registers tool-specific integration that runs `otel-hooks hook`. Trace-capable tools provide transcript/event data for turn reconstruction. Metrics-only tools emit coarse hook events (prompt/tool/session level). Provider settings are stored in a unified otel-hooks config file, shared across all tools.
 
 For metrics-only tools, `otel-hooks` registers all observable hook events (not only end events) to avoid data gaps.
-
-- Copilot: `userPromptSubmitted`, `preToolUse`, `postToolUse`, `sessionEnd`
-- Kiro: `userPromptSubmit`, `preToolUse`, `postToolUse`, `stop`
 
 `preToolUse` / `postToolUse` event names can overlap across tools. `otel-hooks` injects `source_tool` via `OTEL_HOOKS_SOURCE_TOOL` at hook execution time to keep payload adapter selection deterministic.
 
@@ -89,7 +86,7 @@ Project config overrides global. Environment variables override both.
 
 ```bash
 pip install otel-hooks[langfuse]
-otel-hooks enable --tool claude --provider langfuse
+otel-hooks enable --tool <name> --provider langfuse
 ```
 
 | Config key | Env override | Description |
@@ -105,7 +102,7 @@ otel-hooks enable --tool claude --provider langfuse
 
 ```bash
 pip install otel-hooks[otlp]
-otel-hooks enable --tool claude --provider otlp
+otel-hooks enable --tool <name> --provider otlp
 ```
 
 | Config key | Env override | Description |
@@ -120,7 +117,7 @@ otel-hooks enable --tool claude --provider otlp
 
 ```bash
 pip install otel-hooks[datadog]
-otel-hooks enable --tool claude --provider datadog
+otel-hooks enable --tool <name> --provider datadog
 ```
 
 Requires a running [Datadog Agent](https://docs.datadoghq.com/agent/).
@@ -145,11 +142,6 @@ Environment variables always take precedence over config files.
 | `OTEL_HOOKS_MAX_CHARS` | Truncation limit per message (default: `20000`) |
 
 </details>
-
-## References
-
-- [Claude Code Integration with Langfuse](https://langfuse.com/integrations/other/claude-code) – Langfuse official guide for Claude Code tracing
-- [Entire CLI](https://github.com/entireio/cli) – AI agent session capture for git workflows
 
 ## License
 
