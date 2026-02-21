@@ -44,6 +44,13 @@ otel-hooks disable --tool <name>
 
 `enable` registers tool-specific integration that runs `otel-hooks hook`. Trace-capable tools provide transcript/event data for turn reconstruction. Metrics-only tools emit coarse hook events (prompt/tool/session level). Provider settings are stored in a unified otel-hooks config file, shared across all tools. Codex CLI uses native OTLP support instead of hooks.
 
+For metrics-only tools, `otel-hooks` registers all observable hook events (not only end events) to avoid data gaps.
+
+- Copilot: `userPromptSubmitted`, `preToolUse`, `postToolUse`, `sessionEnd`
+- Kiro: `userPromptSubmit`, `preToolUse`, `postToolUse`, `stop`
+
+`preToolUse` / `postToolUse` event names can overlap across tools. `otel-hooks` injects `source_tool` via `OTEL_HOOKS_SOURCE_TOOL` at hook execution time to keep payload adapter selection deterministic.
+
 ## Configuration
 
 Provider settings are stored in otel-hooks config files (not in each tool's settings):
