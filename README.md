@@ -3,7 +3,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/HikaruEgashira/otel-hooks/badge)](https://scorecard.dev/viewer/?uri=github.com/HikaruEgashira/otel-hooks)
 [![PyPI](https://img.shields.io/pypi/v/otel-hooks)](https://pypi.org/project/otel-hooks/)
 
-AI coding tools tracing hooks for observability. Supports **Claude Code**, **Cursor**, and **Codex CLI**.
+AI coding tools tracing hooks for observability. Supports **Claude Code**, **Cursor**, **Codex CLI**, **OpenCode**, **GitHub Copilot**, **Gemini CLI**, **Kiro**, and **Cline**.
 
 <img src="langfuse-demo.png" alt="demo" width="600" />
 
@@ -21,22 +21,23 @@ pip install otel-hooks
 
 | Tool | Mechanism | Setup |
 |------|-----------|-------|
-| **Claude Code** | Stop hook → transcript parsing | `otel-hooks enable --tool claude` |
-| **Cursor** | Stop hook (v1.7+ beta) | `otel-hooks enable --tool cursor` |
-| **Codex CLI** | Native OTLP (`~/.codex/config.toml`) | `otel-hooks enable --tool codex` |
+| [**Claude Code**](https://code.claude.com/docs/en/hooks) | Stop hook → transcript parsing | `otel-hooks enable --tool claude` |
+| [**Cursor**](https://cursor.com/ja/docs/agent/hooks) | Stop hook (v1.7+ beta) | `otel-hooks enable --tool cursor` |
+| [**Codex CLI**](https://github.com/openai/codex) | Native OTLP (`~/.codex/config.toml`) | `otel-hooks enable --tool codex` |
+| [**OpenCode**](https://opencode.ai/docs/plugins/) | `session_completed` hook | `otel-hooks enable --tool opencode` |
+| [**GitHub Copilot**](https://docs.github.com/en/copilot/reference/hooks-configuration) | `sessionEnd` hook (CLI & VS Code) | `otel-hooks enable --tool copilot` |
+| [**Gemini CLI**](https://geminicli.com/docs/hooks/) | `SessionEnd` hook | `otel-hooks enable --tool gemini` |
+| [**Kiro**](https://kiro.dev/docs/cli/hooks/) | `stop` hook (agent config) | `otel-hooks enable --tool kiro` |
+| [**Cline**](https://docs.cline.bot/customization/hooks) | `TaskComplete` script | `otel-hooks enable --tool cline` |
 
 ## Usage
 
 ```bash
-otel-hooks enable                  # interactive tool/provider selection
-otel-hooks enable --tool claude    # configure Claude Code
-otel-hooks enable --tool cursor    # register hook in .cursor/hooks.json
-otel-hooks enable --tool codex     # write [otel] to ~/.codex/config.toml
-
-otel-hooks status                  # show status for all tools
-otel-hooks status --tool claude    # show status for a specific tool
-otel-hooks doctor --tool claude    # detect and fix issues
-otel-hooks disable --tool cursor   # remove the hook
+otel-hooks enable          # interactive tool/provider selection
+otel-hooks enable --tool <name> --provider <provider>
+otel-hooks status          # show status for all tools
+otel-hooks doctor          # detect and fix issues
+otel-hooks disable --tool <name>
 ```
 
 ### Scope flags (Claude Code)
@@ -49,8 +50,7 @@ otel-hooks enable --tool claude --local    # .claude/settings.local.json
 
 ## How it works
 
-- **Claude Code / Cursor**: `enable` registers a [Stop hook](https://docs.anthropic.com/en/docs/claude-code/hooks) that runs `otel-hooks hook` after each response. The hook reads the session transcript incrementally and emits traces to the configured provider.
-- **Codex CLI**: Codex has native OTLP support. `enable` writes the `[otel]` section to `~/.codex/config.toml` with the appropriate endpoint and auth headers.
+`enable` registers a hook in each tool's configuration that runs `otel-hooks hook` at session end. The hook reads the session transcript incrementally and emits traces to the configured provider. Codex CLI uses native OTLP support instead of hooks.
 
 ## Providers
 
