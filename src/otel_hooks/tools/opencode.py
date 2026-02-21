@@ -1,4 +1,4 @@
-"""OpenCode tool configuration (opencode/plugin/otel-hooks.js).
+"""OpenCode tool configuration (.opencode/plugins/otel-hooks.js).
 
 Reference:
   - https://opencode.ai/docs/plugins/
@@ -11,6 +11,8 @@ from typing import Any, Dict
 from . import HookEvent, Scope, _extract_transcript_path, register_tool
 
 PLUGIN_FILE = "otel-hooks.js"
+PLUGIN_DIR = Path(".opencode") / "plugins"
+LEGACY_PLUGIN_DIR = Path("opencode") / "plugin"
 PLUGIN_MARKER = "otel-hooks-opencode-plugin-v1"
 PLUGIN_SCRIPT = f"""// {PLUGIN_MARKER}
 import {{ appendFileSync, mkdirSync }} from "node:fs"
@@ -194,19 +196,38 @@ class OpenCodeConfig:
         return [Scope.PROJECT]
 
     def settings_path(self, scope: Scope) -> Path:
-        return Path.cwd() / "opencode" / "plugin" / PLUGIN_FILE
+        return Path.cwd() / PLUGIN_DIR / PLUGIN_FILE
+
+    def _legacy_settings_path(self, scope: Scope) -> Path:
+        return Path.cwd() / LEGACY_PLUGIN_DIR / PLUGIN_FILE
+
+    def _cleanup_legacy_dirs(self, scope: Scope) -> None:
+        legacy_path = self._legacy_settings_path(scope)
+        for directory in (legacy_path.parent, legacy_path.parent.parent):
+            if directory.exists():
+                try:
+                    directory.rmdir()
+                except OSError:
+                    pass
 
     def load_settings(self, scope: Scope) -> Dict[str, Any]:
         path = self.settings_path(scope)
         if not path.exists():
-            return {}
+            legacy_path = self._legacy_settings_path(scope)
+            if not legacy_path.exists():
+                return {}
+            path = legacy_path
         return {"_script": path.read_text(encoding="utf-8")}
 
     def save_settings(self, settings: Dict[str, Any], scope: Scope) -> None:
         path = self.settings_path(scope)
+        legacy_path = self._legacy_settings_path(scope)
         if settings.get("_delete"):
             if path.exists():
                 path.unlink()
+            if legacy_path.exists():
+                legacy_path.unlink()
+                self._cleanup_legacy_dirs(scope)
             return
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
@@ -216,6 +237,9 @@ class OpenCodeConfig:
         finally:
             os.close(fd)
         tmp.replace(path)
+        if legacy_path.exists():
+            legacy_path.unlink()
+            self._cleanup_legacy_dirs(scope)
 
     def is_hook_registered(self, settings: Dict[str, Any]) -> bool:
         return PLUGIN_MARKER in settings.get("_script", "")
