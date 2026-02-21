@@ -97,23 +97,6 @@ def _add_tool_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--tool", choices=TOOLS, help="Target tool (claude, cursor, codex)")
 
 
-def _is_provider_dep_missing(provider: str) -> bool:
-    try:
-        if provider == "langfuse":
-            import langfuse  # noqa: F401
-        elif provider == "otlp":
-            import opentelemetry  # noqa: F401
-        return False
-    except ImportError:
-        return True
-
-
-def _check_provider_deps(provider: str) -> None:
-    if _is_provider_dep_missing(provider):
-        print(f"  WARNING: Dependencies for '{provider}' not found.")
-        print(f"  Run: pip install otel-hooks[{provider}]")
-
-
 def _enable_codex(args: argparse.Namespace) -> int:
     """Enable tracing for Codex (native OTLP via config.toml)."""
     from .tools.codex import CodexConfig
@@ -149,8 +132,6 @@ def cmd_enable(args: argparse.Namespace) -> int:
     scope = _resolve_scope(args, tool_cfg)
     provider = _resolve_provider(args)
     print(f"Enabling tracing hooks for {tool_name} ({scope.value}, provider={provider})...")
-
-    _check_provider_deps(provider)
 
     cfg = tool_cfg.load_settings(scope)
     cfg = tool_cfg.register_hook(cfg)
@@ -256,9 +237,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if not provider:
         issues.append("OTEL_HOOKS_PROVIDER not set")
 
-    if provider and _is_provider_dep_missing(provider):
-        issues.append(f"Dependencies for '{provider}' not installed (pip install otel-hooks[{provider}])")
-
     env = s.get_env_status(cfg, scope)
     if provider == "langfuse":
         if not env.get("LANGFUSE_PUBLIC_KEY"):
@@ -297,10 +275,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 cfg = s.set_env(cfg, key, value)
     s.save_settings(cfg, scope)
     print("Fixed.")
-
-    if provider and _is_provider_dep_missing(provider):
-        print(f"\n  NOTE: Install provider dependencies: pip install otel-hooks[{provider}]")
-
     return 0
 
 
