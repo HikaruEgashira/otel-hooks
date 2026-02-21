@@ -46,27 +46,53 @@ otel-hooks disable --tool <name>
 
 ## Providers
 
-| Provider | Install | Description |
-|----------|---------|-------------|
-| Langfuse | `pip install otel-hooks[langfuse]` | Traces to Langfuse |
-| OTLP | `pip install otel-hooks[otlp]` | Traces via OpenTelemetry OTLP |
-| Datadog | `pip install otel-hooks[datadog]` | Traces to Datadog via ddtrace |
+### Langfuse
 
-## Environment variables
+```bash
+pip install otel-hooks[langfuse]
+otel-hooks enable --tool claude --provider langfuse
+```
 
 | Variable | Description |
 |---|---|
-| `OTEL_HOOKS_PROVIDER` | Provider name (`langfuse`, `otlp`, or `datadog`) |
+| `LANGFUSE_PUBLIC_KEY` | Public key |
+| `LANGFUSE_SECRET_KEY` | Secret key |
+| `LANGFUSE_BASE_URL` | Host (default: `https://cloud.langfuse.com`) |
+
+### OTLP
+
+```bash
+pip install otel-hooks[otlp]
+otel-hooks enable --tool claude --provider otlp
+```
+
+| Variable | Description |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint URL |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Headers (`key=value,key=value`) |
+
+### Datadog
+
+```bash
+pip install otel-hooks[datadog]
+otel-hooks enable --tool claude --provider datadog
+```
+
+Requires a running [Datadog Agent](https://docs.datadoghq.com/agent/).
+
+| Variable | Description |
+|---|---|
+| `DD_SERVICE` | Service name (default: `otel-hooks`) |
+| `DD_ENV` | Environment tag |
+| `DD_AGENT_HOST` | Agent host (default: `localhost`) |
+| `DD_TRACE_AGENT_PORT` | Agent port (default: `8126`) |
+
+### Common
+
+| Variable | Description |
+|---|---|
+| `OTEL_HOOKS_PROVIDER` | `langfuse`, `otlp`, or `datadog` |
 | `OTEL_HOOKS_ENABLED` | Set `true` to enable |
-| `LANGFUSE_PUBLIC_KEY` | Langfuse public key |
-| `LANGFUSE_SECRET_KEY` | Langfuse secret key |
-| `LANGFUSE_BASE_URL` | Langfuse host (default: `https://cloud.langfuse.com`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint URL |
-| `OTEL_EXPORTER_OTLP_HEADERS` | OTLP headers (`key=value,key=value`) |
-| `DD_SERVICE` | Datadog service name (default: `otel-hooks`) |
-| `DD_ENV` | Datadog environment tag |
-| `DD_AGENT_HOST` | Datadog Agent host (default: `localhost`) |
-| `DD_TRACE_AGENT_PORT` | Datadog Agent port (default: `8126`) |
 | `OTEL_HOOKS_DEBUG` | Set `true` to enable debug logging |
 | `OTEL_HOOKS_MAX_CHARS` | Truncation limit per message (default: `20000`) |
 
