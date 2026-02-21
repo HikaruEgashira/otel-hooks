@@ -19,16 +19,16 @@ pipx otel-hooks
 
 ## Supported tools
 
-| Tool | Support | Scope | Setup |
-|------|---------|-------|-------|
+| Tool | Support | Scope¹ | Setup |
+|------|---------|--------|-------|
 | [Claude Code](https://code.claude.com/docs/en/hooks) | Trace | Global / Project | `otel-hooks enable --tool claude` |
 | [Cursor](https://cursor.com/ja/docs/agent/hooks) | Trace | Project | `otel-hooks enable --tool cursor` |
 | [Codex CLI](https://developers.openai.com/codex/config-reference) | Trace | Global | `otel-hooks enable --tool codex` |
-| [OpenCode](https://opencode.ai/docs/plugins/) | Trace + Metrics | Project | `otel-hooks enable --tool opencode` |
-| [GitHub Copilot](https://docs.github.com/en/copilot/reference/hooks-configuration) | Metrics | Project | `otel-hooks enable --tool copilot` |
-| [Kiro](https://kiro.dev/docs/cli/hooks/) | Metrics | Global / Project | `otel-hooks enable --tool kiro` |
+| [OpenCode](https://opencode.ai/docs/plugins/) | Trace | Project | `otel-hooks enable --tool opencode` |
 | [Gemini CLI](https://geminicli.com/docs/hooks/) | Trace | Global / Project | `otel-hooks enable --tool gemini` |
 | [Cline](https://docs.cline.bot/customization/hooks) | Trace | Project | `otel-hooks enable --tool cline` |
+| [GitHub Copilot](https://docs.github.com/en/copilot/reference/hooks-configuration) | Metrics Only | Project | `otel-hooks enable --tool copilot` |
+| [Kiro](https://kiro.dev/docs/cli/hooks/) | Metrics Only | Global / Project | `otel-hooks enable --tool kiro` |
 
 ## Usage
 
@@ -42,7 +42,7 @@ otel-hooks disable --tool <name>
 
 ## How it works
 
-`enable` registers tool-specific integration that runs `otel-hooks hook`. Trace-capable tools provide transcript/event data for turn reconstruction. Metrics-only tools emit coarse hook events (prompt/tool/session level). Provider settings are stored in a unified otel-hooks config file, shared across all tools.
+`enable` registers tool-specific integration that runs `otel-hooks hook`. **Trace** tools provide transcript data for full turn reconstruction (including per-event metrics). **Metrics** tools lack transcript access, so only coarse hook events (prompt/tool/session level) are recorded. Provider settings are stored in a unified otel-hooks config file, shared across all tools.
 
 For metrics-only tools, `otel-hooks` registers all observable hook events (not only end events) to avoid data gaps.
 
