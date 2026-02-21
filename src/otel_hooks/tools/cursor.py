@@ -1,4 +1,8 @@
-"""Cursor tool configuration (.cursor/hooks.json)."""
+"""Cursor tool configuration (.cursor/hooks.json).
+
+Reference:
+  - https://cursor.com/ja/docs/agent/hooks
+"""
 
 import json
 import os

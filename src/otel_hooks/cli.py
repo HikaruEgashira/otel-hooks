@@ -12,7 +12,7 @@ from .tools import available_tools, get_tool, ToolConfig
 
 
 PROVIDERS = ["langfuse", "otlp"]
-TOOLS = ["claude", "cursor", "codex"]
+TOOLS = ["claude", "cursor", "codex", "opencode", "copilot", "gemini", "kiro", "cline"]
 
 
 def _resolve_tool(args: argparse.Namespace) -> str:

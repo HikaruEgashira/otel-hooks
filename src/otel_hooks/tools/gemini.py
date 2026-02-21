@@ -1,7 +1,10 @@
-"""Claude Code tool configuration.
+"""Gemini CLI tool configuration (.gemini/settings.json).
+
+Hooks format is similar to Claude Code with grouped hook arrays.
 
 Reference:
-  - https://code.claude.com/docs/en/hooks
+  - https://geminicli.com/docs/hooks/
+  - https://geminicli.com/docs/hooks/reference/
 """
 
 import json
@@ -15,20 +18,18 @@ HOOK_COMMAND = "otel-hooks hook"
 
 
 @register_tool
-class ClaudeConfig:
+class GeminiConfig:
     @property
     def name(self) -> str:
-        return "claude"
+        return "gemini"
 
     def scopes(self) -> list[Scope]:
-        return [Scope.GLOBAL, Scope.PROJECT, Scope.LOCAL]
+        return [Scope.GLOBAL, Scope.PROJECT]
 
     def settings_path(self, scope: Scope) -> Path:
         if scope is Scope.GLOBAL:
-            return Path.home() / ".claude" / "settings.json"
-        if scope is Scope.PROJECT:
-            return Path.cwd() / ".claude" / "settings.json"
-        return Path.cwd() / ".claude" / "settings.local.json"
+            return Path.home() / ".gemini" / "settings.json"
+        return Path.cwd() / ".gemini" / "settings.json"
 
     def load_settings(self, scope: Scope) -> Dict[str, Any]:
         path = self.settings_path(scope)
@@ -48,44 +49,43 @@ class ClaudeConfig:
         tmp.replace(path)
 
     def is_hook_registered(self, settings: Dict[str, Any]) -> bool:
-        stop_hooks = settings.get("hooks", {}).get("Stop", [])
-        for group in stop_hooks:
+        groups = settings.get("hooks", {}).get("SessionEnd", [])
+        for group in groups:
             for hook in group.get("hooks", []):
                 if HOOK_COMMAND in hook.get("command", ""):
                     return True
         return False
 
     def is_enabled(self, settings: Dict[str, Any]) -> bool:
-        if not self.is_hook_registered(settings):
-            return False
-        env = settings.get("env", {})
-        return env.get("OTEL_HOOKS_ENABLED", "").lower() == "true"
+        return self.is_hook_registered(settings)
 
     def register_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]:
         hooks = settings.setdefault("hooks", {})
-        stop = hooks.setdefault("Stop", [])
-        for group in stop:
+        session_end = hooks.setdefault("SessionEnd", [])
+        for group in session_end:
             for hook in group.get("hooks", []):
                 if HOOK_COMMAND in hook.get("command", ""):
                     return settings
-        stop.append({"hooks": [{"type": "command", "command": HOOK_COMMAND}]})
+        session_end.append({
+            "hooks": [{"type": "command", "command": HOOK_COMMAND}],
+        })
         return settings
 
     def unregister_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]:
-        stop = settings.get("hooks", {}).get("Stop", [])
-        if not stop:
+        groups = settings.get("hooks", {}).get("SessionEnd", [])
+        if not groups:
             return settings
-        settings["hooks"]["Stop"] = [
-            group for group in stop
-            if not any(HOOK_COMMAND in hook.get("command", "") for hook in group.get("hooks", []))
+        settings["hooks"]["SessionEnd"] = [
+            g for g in groups
+            if not any(HOOK_COMMAND in h.get("command", "") for h in g.get("hooks", []))
         ]
-        if not settings["hooks"]["Stop"]:
-            del settings["hooks"]["Stop"]
+        if not settings["hooks"]["SessionEnd"]:
+            del settings["hooks"]["SessionEnd"]
         return settings
 
     def set_env(self, settings: Dict[str, Any], key: str, value: str) -> Dict[str, Any]:
-        settings.setdefault("env", {})[key] = value
+        # Gemini CLI doesn't have env in settings; use system env
         return settings
 
     def get_env(self, settings: Dict[str, Any], key: str) -> Optional[str]:
-        return settings.get("env", {}).get(key)
+        return os.environ.get(key)

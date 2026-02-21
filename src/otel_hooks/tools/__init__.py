@@ -56,8 +56,13 @@ def available_tools() -> list[str]:
 
 def _ensure_registered() -> None:
     """Import all tool modules to trigger @register_tool decorators."""
-    if len(TOOL_REGISTRY) >= 3:
+    if len(TOOL_REGISTRY) >= 8:
         return
     from . import claude as _claude  # noqa: F811,F401
     from . import cursor as _cursor  # noqa: F401
     from . import codex as _codex  # noqa: F401
+    from . import opencode as _opencode  # noqa: F401
+    from . import copilot as _copilot  # noqa: F401
+    from . import gemini as _gemini  # noqa: F401
+    from . import kiro as _kiro  # noqa: F401
+    from . import cline as _cline  # noqa: F401

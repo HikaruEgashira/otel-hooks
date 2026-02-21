@@ -1,7 +1,10 @@
-"""Claude Code tool configuration.
+"""Kiro CLI tool configuration (.kiro/agents/default.json).
+
+Hooks are defined in agent configuration files with a stop trigger.
 
 Reference:
-  - https://code.claude.com/docs/en/hooks
+  - https://kiro.dev/docs/cli/hooks/
+  - https://kiro.dev/docs/cli/custom-agents/configuration-reference/
 """
 
 import json
@@ -12,23 +15,22 @@ from typing import Any, Dict, Optional
 from . import Scope, register_tool
 
 HOOK_COMMAND = "otel-hooks hook"
+AGENT_FILE = "default.json"
 
 
 @register_tool
-class ClaudeConfig:
+class KiroConfig:
     @property
     def name(self) -> str:
-        return "claude"
+        return "kiro"
 
     def scopes(self) -> list[Scope]:
-        return [Scope.GLOBAL, Scope.PROJECT, Scope.LOCAL]
+        return [Scope.GLOBAL, Scope.PROJECT]
 
     def settings_path(self, scope: Scope) -> Path:
         if scope is Scope.GLOBAL:
-            return Path.home() / ".claude" / "settings.json"
-        if scope is Scope.PROJECT:
-            return Path.cwd() / ".claude" / "settings.json"
-        return Path.cwd() / ".claude" / "settings.local.json"
+            return Path.home() / ".kiro" / "agents" / AGENT_FILE
+        return Path.cwd() / ".kiro" / "agents" / AGENT_FILE
 
     def load_settings(self, scope: Scope) -> Dict[str, Any]:
         path = self.settings_path(scope)
@@ -48,44 +50,33 @@ class ClaudeConfig:
         tmp.replace(path)
 
     def is_hook_registered(self, settings: Dict[str, Any]) -> bool:
-        stop_hooks = settings.get("hooks", {}).get("Stop", [])
-        for group in stop_hooks:
-            for hook in group.get("hooks", []):
-                if HOOK_COMMAND in hook.get("command", ""):
-                    return True
-        return False
+        stop_hooks = settings.get("hooks", {}).get("stop", [])
+        return any(HOOK_COMMAND in h.get("command", "") for h in stop_hooks)
 
     def is_enabled(self, settings: Dict[str, Any]) -> bool:
-        if not self.is_hook_registered(settings):
-            return False
-        env = settings.get("env", {})
-        return env.get("OTEL_HOOKS_ENABLED", "").lower() == "true"
+        return self.is_hook_registered(settings)
 
     def register_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]:
         hooks = settings.setdefault("hooks", {})
-        stop = hooks.setdefault("Stop", [])
-        for group in stop:
-            for hook in group.get("hooks", []):
-                if HOOK_COMMAND in hook.get("command", ""):
-                    return settings
-        stop.append({"hooks": [{"type": "command", "command": HOOK_COMMAND}]})
+        stop = hooks.setdefault("stop", [])
+        if any(HOOK_COMMAND in h.get("command", "") for h in stop):
+            return settings
+        stop.append({"command": HOOK_COMMAND})
         return settings
 
     def unregister_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]:
-        stop = settings.get("hooks", {}).get("Stop", [])
+        stop = settings.get("hooks", {}).get("stop", [])
         if not stop:
             return settings
-        settings["hooks"]["Stop"] = [
-            group for group in stop
-            if not any(HOOK_COMMAND in hook.get("command", "") for hook in group.get("hooks", []))
+        settings["hooks"]["stop"] = [
+            h for h in stop if HOOK_COMMAND not in h.get("command", "")
         ]
-        if not settings["hooks"]["Stop"]:
-            del settings["hooks"]["Stop"]
+        if not settings["hooks"]["stop"]:
+            del settings["hooks"]["stop"]
         return settings
 
     def set_env(self, settings: Dict[str, Any], key: str, value: str) -> Dict[str, Any]:
-        settings.setdefault("env", {})[key] = value
         return settings
 
     def get_env(self, settings: Dict[str, Any], key: str) -> Optional[str]:
-        return settings.get("env", {}).get(key)
+        return os.environ.get(key)
