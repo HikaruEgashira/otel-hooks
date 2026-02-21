@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import io
 import json
 import tempfile
 import tests._path_setup  # noqa: F401
 import unittest
-from contextlib import ExitStack
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from unittest.mock import patch
 
 from otel_hooks import hook
 
@@ -29,18 +27,7 @@ class _StubProvider:
 
 
 class HookIntegrationTest(unittest.TestCase):
-    def _patch_runtime_paths(self, root: Path) -> ExitStack:
-        stack = ExitStack()
-        state_dir = root / "state"
-        stack.enter_context(patch("otel_hooks.runtime.state.STATE_DIR", state_dir))
-        stack.enter_context(patch("otel_hooks.runtime.state.STATE_FILE", state_dir / "otel_hook_state.json"))
-        stack.enter_context(patch("otel_hooks.runtime.state.LOCK_FILE", state_dir / "otel_hook_state.lock"))
-        stack.enter_context(patch("otel_hooks.hook.STATE_DIR", state_dir))
-        stack.enter_context(patch("otel_hooks.hook.LOG_FILE", state_dir / "otel_hook.log"))
-        stack.enter_context(patch("otel_hooks.hook.LOCK_FILE", state_dir / "otel_hook_state.lock"))
-        return stack
-
-    def test_main_emits_once_and_skips_already_processed_lines(self) -> None:
+    def test_run_hook_emits_once_and_skips_already_processed_lines(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             transcript = root / "session.jsonl"
@@ -74,18 +61,21 @@ class HookIntegrationTest(unittest.TestCase):
             )
 
             payload = {"sessionId": "s-1", "transcriptPath": str(transcript)}
-            stdin_data = io.StringIO(json.dumps(payload))
+            config = {
+                "enabled": True,
+                "provider": "langfuse",
+                "debug": False,
+                "state_dir": str(root / "state"),
+            }
 
             provider1 = _StubProvider()
             provider2 = _StubProvider()
+            providers = [provider1, provider2]
 
-            with self._patch_runtime_paths(root), patch(
-                "otel_hooks.config.load_config",
-                return_value={"enabled": True, "provider": "langfuse", "debug": False},
-            ), patch("otel_hooks.hook.create_provider", side_effect=[provider1, provider2]), patch(
-                "sys.stdin", stdin_data
-            ):
-                rc1 = hook.main()
+            def provider_factory(_name: str, _cfg: dict[str, object]):
+                return providers.pop(0)
+
+            rc1 = hook.run_hook(payload, config, provider_factory=provider_factory)
 
             self.assertEqual(rc1, 0)
             self.assertEqual(provider1.emitted, [("s-1", 1)])
@@ -93,13 +83,7 @@ class HookIntegrationTest(unittest.TestCase):
             self.assertTrue(provider1.shutdown_called)
 
             # 同一 payload を再実行しても state により再送しない
-            with self._patch_runtime_paths(root), patch(
-                "otel_hooks.config.load_config",
-                return_value={"enabled": True, "provider": "langfuse", "debug": False},
-            ), patch("otel_hooks.hook.create_provider", side_effect=[provider2]), patch(
-                "sys.stdin", io.StringIO(json.dumps(payload))
-            ):
-                rc2 = hook.main()
+            rc2 = hook.run_hook(payload, config, provider_factory=provider_factory)
 
             self.assertEqual(rc2, 0)
             self.assertEqual(provider2.emitted, [])
@@ -113,22 +97,120 @@ class HookIntegrationTest(unittest.TestCase):
             saved = next(iter(state.values()))
             self.assertEqual(saved["turn_count"], 1)
 
-    def test_main_returns_zero_when_provider_is_not_created(self) -> None:
+    def test_run_hook_returns_zero_when_provider_is_not_created(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             transcript = root / "session.jsonl"
             transcript.write_text("", encoding="utf-8")
             payload = {"sessionId": "s-1", "transcriptPath": str(transcript)}
+            config = {
+                "enabled": True,
+                "provider": "langfuse",
+                "debug": False,
+                "state_dir": str(root / "state"),
+            }
 
-            with self._patch_runtime_paths(root), patch(
-                "otel_hooks.config.load_config",
-                return_value={"enabled": True, "provider": "langfuse", "debug": False},
-            ), patch("otel_hooks.hook.create_provider", return_value=None), patch(
-                "sys.stdin", io.StringIO(json.dumps(payload))
-            ):
-                rc = hook.main()
+            rc = hook.run_hook(payload, config, provider_factory=lambda _name, _cfg: None)
 
             self.assertEqual(rc, 0)
+
+    def test_run_hook_parallel_calls_do_not_cross_state_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+
+            transcript_a = root / "a.jsonl"
+            transcript_a.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "type": "user",
+                                "message": {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "hello-a"}],
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "type": "assistant",
+                                "message": {
+                                    "id": "aa",
+                                    "role": "assistant",
+                                    "model": "gpt-5",
+                                    "content": [{"type": "text", "text": "world-a"}],
+                                },
+                            }
+                        ),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            transcript_b = root / "b.jsonl"
+            transcript_b.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "type": "user",
+                                "message": {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "hello-b"}],
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "type": "assistant",
+                                "message": {
+                                    "id": "bb",
+                                    "role": "assistant",
+                                    "model": "gpt-5",
+                                    "content": [{"type": "text", "text": "world-b"}],
+                                },
+                            }
+                        ),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            payload_a = {"sessionId": "s-a", "transcriptPath": str(transcript_a)}
+            payload_b = {"sessionId": "s-b", "transcriptPath": str(transcript_b)}
+            config_a = {
+                "enabled": True,
+                "provider": "langfuse",
+                "debug": False,
+                "state_dir": str(root / "state-a"),
+            }
+            config_b = {
+                "enabled": True,
+                "provider": "langfuse",
+                "debug": False,
+                "state_dir": str(root / "state-b"),
+            }
+
+            provider_a = _StubProvider()
+            provider_b = _StubProvider()
+
+            def provider_factory(_name: str, cfg: dict[str, object]):
+                return provider_a if cfg["state_dir"] == str(root / "state-a") else provider_b
+
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                fut_a = ex.submit(hook.run_hook, payload_a, config_a, provider_factory=provider_factory)
+                fut_b = ex.submit(hook.run_hook, payload_b, config_b, provider_factory=provider_factory)
+                rc_a = fut_a.result(timeout=5)
+                rc_b = fut_b.result(timeout=5)
+
+            self.assertEqual(rc_a, 0)
+            self.assertEqual(rc_b, 0)
+            self.assertEqual(provider_a.emitted, [("s-a", 1)])
+            self.assertEqual(provider_b.emitted, [("s-b", 1)])
+            self.assertTrue((root / "state-a" / "otel_hook_state.json").exists())
+            self.assertTrue((root / "state-b" / "otel_hook_state.json").exists())
 
 
 if __name__ == "__main__":

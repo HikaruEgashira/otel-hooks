@@ -29,6 +29,7 @@ from otel_hooks.runtime.state import (
     write_session_state,
 )
 
+
 def _log(log_file: Path, level: str, message: str) -> None:
     try:
         from otel_hooks.file_io import append_line
@@ -135,17 +136,6 @@ def run_hook(
         except Exception:
             pass
 
-
-def main() -> int:
-    try:
-        from otel_hooks.config import load_config
-
-        config = load_config()
-    except Exception:
-        config = {}
-    payload = read_hook_payload()
-    return run_hook(payload, config)
-
         duration = time.time() - start
         info(
             f"Processed {emitted} turns in {duration:.2f}s "
@@ -160,6 +150,17 @@ def main() -> int:
             provider.shutdown()
         except Exception:
             pass
+
+
+def main() -> int:
+    try:
+        from otel_hooks.config import load_config
+
+        config = load_config()
+    except Exception:
+        config = {}
+    payload = read_hook_payload()
+    return run_hook(payload, config)
 
 
 if __name__ == "__main__":
