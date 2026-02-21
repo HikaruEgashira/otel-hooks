@@ -10,9 +10,9 @@ from typing import Any, Dict
 from . import HookEvent, Scope, register_tool
 from .json_io import load_json, save_json
 
-HOOK_COMMAND = "otel-hooks hook"
+HOOK_COMMAND = "OTEL_HOOKS_SOURCE_TOOL=kiro otel-hooks hook"
 AGENT_FILE = "default.json"
-_EVENTS = {"userPromptSubmit", "preToolUse", "postToolUse", "stop"}
+_HOOK_EVENTS = ("userPromptSubmit", "preToolUse", "postToolUse", "stop")
 
 
 def _to_str_map(raw: dict[str, Any]) -> dict[str, str]:
@@ -40,34 +40,40 @@ class KiroConfig:
         save_json(self.settings_path(scope), settings)
 
     def is_hook_registered(self, settings: Dict[str, Any]) -> bool:
-        stop_hooks = settings.get("hooks", {}).get("stop", [])
-        return any(HOOK_COMMAND in h.get("command", "") for h in stop_hooks)
+        hooks = settings.get("hooks", {})
+        return all(
+            any(HOOK_COMMAND in hook.get("command", "") for hook in hooks.get(event_name, []))
+            for event_name in _HOOK_EVENTS
+        )
 
     def is_enabled(self, settings: Dict[str, Any]) -> bool:
         return self.is_hook_registered(settings)
 
     def register_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]:
         hooks = settings.setdefault("hooks", {})
-        stop = hooks.setdefault("stop", [])
-        if any(HOOK_COMMAND in h.get("command", "") for h in stop):
-            return settings
-        stop.append({"command": HOOK_COMMAND})
+        for event_name in _HOOK_EVENTS:
+            group = hooks.setdefault(event_name, [])
+            if any(HOOK_COMMAND in hook.get("command", "") for hook in group):
+                continue
+            group.append({"command": HOOK_COMMAND})
         return settings
 
     def unregister_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]:
-        stop = settings.get("hooks", {}).get("stop", [])
-        if not stop:
-            return settings
-        settings["hooks"]["stop"] = [
-            h for h in stop if HOOK_COMMAND not in h.get("command", "")
-        ]
-        if not settings["hooks"]["stop"]:
-            del settings["hooks"]["stop"]
+        hooks = settings.get("hooks", {})
+        for event_name in _HOOK_EVENTS:
+            group = hooks.get(event_name, [])
+            if not group:
+                continue
+            hooks[event_name] = [
+                hook for hook in group if HOOK_COMMAND not in hook.get("command", "")
+            ]
+            if not hooks[event_name]:
+                del hooks[event_name]
         return settings
 
     def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
         event = payload.get("hook_event_name")
-        if not isinstance(event, str) or event not in _EVENTS:
+        if not isinstance(event, str) or event not in _HOOK_EVENTS:
             return None
 
         session_id = payload.get("session_id")

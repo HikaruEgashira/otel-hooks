@@ -90,6 +90,31 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.metric_name, "tool_started")
         self.assertEqual(event.metric_attributes["tool_name"], "bash")
 
+    def test_parse_hook_event_for_copilot_metrics_payload_lower_camel(self) -> None:
+        payload = {
+            "source_tool": "copilot",
+            "hook_event_name": "preToolUse",
+            "tool_name": "bash",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source_tool, "copilot")
+        self.assertEqual(event.kind, SupportKind.METRICS)
+        self.assertEqual(event.metric_name, "tool_started")
+        self.assertEqual(event.metric_attributes["tool_name"], "bash")
+
+    def test_parse_hook_event_uses_source_tool_hint_for_ambiguous_payload(self) -> None:
+        payload = {
+            "source_tool": "kiro",
+            "hook_event_name": "preToolUse",
+            "tool_name": "bash",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source_tool, "kiro")
+
     def test_parse_hook_event_for_kiro_metrics_payload(self) -> None:
         payload = {"hook_event_name": "userPromptSubmit", "prompt": "hello", "cwd": "/tmp"}
         event = parse_hook_event(payload)

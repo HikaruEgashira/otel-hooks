@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -54,9 +55,13 @@ def _resolve_state_paths(config: dict[str, Any]) -> StatePaths:
 def read_hook_payload() -> dict[str, Any]:
     try:
         data = sys.stdin.read()
-        if not data.strip():
-            return {}
-        return json.loads(data)
+        payload: dict[str, Any] = {}
+        if data.strip():
+            payload = json.loads(data)
+        tool_hint = os.environ.get("OTEL_HOOKS_SOURCE_TOOL", "").strip()
+        if tool_hint and "source_tool" not in payload:
+            payload["source_tool"] = tool_hint
+        return payload
     except Exception:
         return {}
 

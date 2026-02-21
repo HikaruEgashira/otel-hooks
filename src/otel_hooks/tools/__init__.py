@@ -124,6 +124,12 @@ def parse_hook_event(
 ) -> HookEvent | None:
     """Parse tool payload into a normalized HookEvent via registered adapters."""
     _ensure_registered()
+    source_tool = payload.get("source_tool")
+    if isinstance(source_tool, str) and source_tool in TOOL_REGISTRY:
+        hinted = TOOL_REGISTRY[source_tool]().parse_event(payload)
+        if hinted is not None:
+            return hinted
+
     seen: set[str] = set()
     for name in _PARSE_ORDER:
         if name in TOOL_REGISTRY:

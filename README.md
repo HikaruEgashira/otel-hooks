@@ -25,7 +25,7 @@ pipx otel-hooks
 | [Cursor](https://cursor.com/ja/docs/agent/hooks) | Trace | Stop hook (v1.7+ beta) | `otel-hooks enable --tool cursor` |
 | [Codex CLI](https://developers.openai.com/codex/config-reference) | Trace | Native OTLP (`~/.codex/config.toml`) | `otel-hooks enable --tool codex` |
 | [OpenCode](https://opencode.ai/docs/plugins/) | Trace + Metrics | Plugin event stream (`.opencode/plugins/otel-hooks.js`) | `otel-hooks enable --tool opencode` |
-| [GitHub Copilot](https://docs.github.com/en/copilot/reference/hooks-configuration) | Metrics | Hook events (`UserPromptSubmit/PreToolUse/PostToolUse/SessionEnd`) | `otel-hooks enable --tool copilot` |
+| [GitHub Copilot](https://docs.github.com/en/copilot/reference/hooks-configuration) | Metrics | Hook events (`userPromptSubmitted/preToolUse/postToolUse/sessionEnd`) | `otel-hooks enable --tool copilot` |
 | [Kiro](https://kiro.dev/docs/cli/hooks/) | Metrics | Hook events (`userPromptSubmit/preToolUse/postToolUse/stop`) | `otel-hooks enable --tool kiro` |
 | [Gemini CLI](https://geminicli.com/docs/hooks/) | Trace | `SessionEnd` hook | `otel-hooks enable --tool gemini` |
 | [Cline](https://docs.cline.bot/customization/hooks) | Trace | `TaskComplete` script | `otel-hooks enable --tool cline` |
