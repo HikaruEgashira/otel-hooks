@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
+
+from otel_hooks.file_io import atomic_write
 
 
 def load_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -17,12 +18,5 @@ def load_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, An
         return default.copy() if default is not None else {}
 
 
-def save_json(path: Path, data: dict[str, Any], mode: int = 0o600) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
-    try:
-        os.write(fd, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-    finally:
-        os.close(fd)
-    tmp.replace(path)
+def save_json(path: Path, data: dict[str, Any]) -> None:
+    atomic_write(path, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))

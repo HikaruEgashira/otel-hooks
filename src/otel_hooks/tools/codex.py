@@ -30,10 +30,9 @@ def _read_toml(path: Path) -> Dict[str, Any]:
 def _write_toml(data: Dict[str, Any], path: Path) -> None:
     import tomli_w
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_bytes(tomli_w.dumps(data).encode("utf-8"))
-    tmp.replace(path)
+    from otel_hooks.file_io import atomic_write
+
+    atomic_write(path, tomli_w.dumps(data).encode("utf-8"))
 
 
 def _parse_headers(raw: str) -> Dict[str, str]:

@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
+from .file_io import atomic_write
 from .tools import Scope
 
 
@@ -36,6 +37,7 @@ _ENV_OVERRIDES: list[tuple[str, str]] = [
     ("enabled", "OTEL_HOOKS_ENABLED"),
     ("debug", "OTEL_HOOKS_DEBUG"),
     ("max_chars", "OTEL_HOOKS_MAX_CHARS"),
+    ("state_dir", "OTEL_HOOKS_STATE_DIR"),
 ]
 
 _PROVIDER_ENV: Dict[str, list[tuple[str, str]]] = {
@@ -107,15 +109,7 @@ def _apply_env_overrides(merged: Dict[str, Any]) -> None:
 
 def save_config(data: Dict[str, Any], scope: Scope) -> None:
     """Save config to the specified scope."""
-    path = config_path(scope)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.write(fd, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-    finally:
-        os.close(fd)
-    tmp.replace(path)
+    atomic_write(config_path(scope), (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
 
 
 def get_provider_config(config: Dict[str, Any], provider: str) -> Dict[str, str]:

@@ -11,9 +11,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-STATE_DIR = Path.home() / ".claude" / "state"
-STATE_FILE = STATE_DIR / "otel_hook_state.json"
-LOCK_FILE = STATE_DIR / "otel_hook_state.lock"
+DEFAULT_STATE_DIR = Path.home() / ".config" / "otel-hooks" / "state"
+
+
+@dataclass(frozen=True)
+class StatePaths:
+    state_dir: Path
+    state_file: Path
+    lock_file: Path
+
+
+def build_state_paths(state_dir: Path) -> StatePaths:
+    return StatePaths(
+        state_dir=state_dir,
+        state_file=state_dir / "otel_hook_state.json",
+        lock_file=state_dir / "otel_hook_state.lock",
+    )
 
 
 class FileLock:
@@ -23,7 +36,7 @@ class FileLock:
         self._fh = None
 
     def __enter__(self):
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = open(self.path, "a+", encoding="utf-8")
         try:
             import fcntl
@@ -66,23 +79,24 @@ def state_key(session_id: str, transcript_path: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def load_state() -> dict[str, Any]:
+def load_state(state_file: Path) -> dict[str, Any]:
     try:
-        if not STATE_FILE.exists():
+        if not state_file.exists():
             return {}
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        return json.loads(state_file.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
 
-def save_state(state: dict[str, Any]) -> None:
+def save_state(state: dict[str, Any], state_file: Path) -> None:
     try:
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = STATE_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp, STATE_FILE)
+        from otel_hooks.file_io import atomic_write
+
+        atomic_write(state_file, json.dumps(state, indent=2, sort_keys=True).encode("utf-8"))
     except Exception:
         pass
+
+
 
 
 def load_session_state(global_state: dict[str, Any], key: str) -> SessionState:

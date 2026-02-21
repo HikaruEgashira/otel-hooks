@@ -10,15 +10,17 @@ import json
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from otel_hooks.adapters.hook_payload import parse_hook_event
 from otel_hooks.domain.transcript import build_turns, decode_jsonl_lines
 from otel_hooks.providers.factory import create_provider
 from otel_hooks.runtime.state import (
+    DEFAULT_STATE_DIR,
     FileLock,
-    LOCK_FILE,
-    STATE_DIR,
+    StatePaths,
+    build_state_paths,
     load_session_state,
     load_state,
     read_new_jsonl_lines,
@@ -27,31 +29,25 @@ from otel_hooks.runtime.state import (
     write_session_state,
 )
 
-LOG_FILE = STATE_DIR / "otel_hook.log"
-DEBUG = False
-
-
-def _log(level: str, message: str) -> None:
+def _log(log_file: Path, level: str, message: str) -> None:
     try:
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        from otel_hooks.file_io import append_line
+
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{ts} [{level}] {message}\n")
+        append_line(log_file, f"{ts} [{level}] {message}\n")
     except Exception:
         pass
 
 
-def debug(msg: str) -> None:
-    if DEBUG:
-        _log("DEBUG", msg)
-
-
-def info(msg: str) -> None:
-    _log("INFO", msg)
-
-
-def warn(msg: str) -> None:
-    _log("WARN", msg)
+def _resolve_state_paths(config: dict[str, Any]) -> StatePaths:
+    configured = config.get("state_dir")
+    if configured:
+        try:
+            base = Path(str(configured)).expanduser().resolve()
+            return build_state_paths(base)
+        except Exception:
+            pass
+    return build_state_paths(DEFAULT_STATE_DIR)
 
 
 def read_hook_payload() -> dict[str, Any]:
@@ -64,18 +60,26 @@ def read_hook_payload() -> dict[str, Any]:
         return {}
 
 
-def main() -> int:
-    global DEBUG
-
+def run_hook(
+    payload: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    provider_factory=create_provider,
+) -> int:
     start = time.time()
-    try:
-        from otel_hooks.config import load_config
+    debug_enabled = bool(config.get("debug", False))
+    runtime_state_paths = _resolve_state_paths(config)
+    log_file = runtime_state_paths.state_dir / "otel_hook.log"
 
-        config = load_config()
-    except Exception:
-        config = {}
+    def debug(msg: str) -> None:
+        if debug_enabled:
+            _log(log_file, "DEBUG", msg)
 
-    DEBUG = config.get("debug", False)
+    def info(msg: str) -> None:
+        _log(log_file, "INFO", msg)
+
+    def warn(msg: str) -> None:
+        _log(log_file, "WARN", msg)
 
     if not config.get("enabled", False):
         return 0
@@ -84,11 +88,10 @@ def main() -> int:
     if not provider_name:
         return 0
 
-    provider = create_provider(provider_name, config)
+    provider = provider_factory(provider_name, config)
     if not provider:
         return 0
 
-    payload = read_hook_payload()
     event = parse_hook_event(payload, warn_fn=warn)
 
     if event is None or not event.transcript_path.exists():
@@ -97,22 +100,22 @@ def main() -> int:
 
     emitted = 0
     try:
-        with FileLock(LOCK_FILE):
-            state = load_state()
+        with FileLock(runtime_state_paths.lock_file):
+            state = load_state(runtime_state_paths.state_file)
             key = state_key(event.session_id, str(event.transcript_path))
             ss = load_session_state(state, key)
 
             lines, ss = read_new_jsonl_lines(event.transcript_path, ss)
             if not lines:
                 write_session_state(state, key, ss)
-                save_state(state)
+                save_state(state, runtime_state_paths.state_file)
                 return 0
 
             msgs = decode_jsonl_lines(lines)
             turns = build_turns(msgs)
             if not turns:
                 write_session_state(state, key, ss)
-                save_state(state)
+                save_state(state, runtime_state_paths.state_file)
                 return 0
 
             for turn in turns:
@@ -125,12 +128,23 @@ def main() -> int:
 
             ss.turn_count += emitted
             write_session_state(state, key, ss)
-            save_state(state)
+            save_state(state, runtime_state_paths.state_file)
 
         try:
             provider.flush()
         except Exception:
             pass
+
+
+def main() -> int:
+    try:
+        from otel_hooks.config import load_config
+
+        config = load_config()
+    except Exception:
+        config = {}
+    payload = read_hook_payload()
+    return run_hook(payload, config)
 
         duration = time.time() - start
         info(
