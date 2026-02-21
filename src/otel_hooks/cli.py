@@ -121,14 +121,17 @@ def _enable_codex(args: argparse.Namespace) -> int:
     codex = CodexConfig()
     codex_cfg = codex.load_settings(Scope.GLOBAL)
 
+    merged = cfg.load_config()
+    merged_section = merged.get(provider, {})
+
     if provider == "langfuse":
-        public_key = _text("LANGFUSE_PUBLIC_KEY:")
-        secret_key = _password("LANGFUSE_SECRET_KEY:")
-        base_url = _text("LANGFUSE_BASE_URL:", default="https://cloud.langfuse.com")
+        public_key = merged_section.get("public_key") or _text("LANGFUSE_PUBLIC_KEY:")
+        secret_key = merged_section.get("secret_key") or _password("LANGFUSE_SECRET_KEY:")
+        base_url = merged_section.get("base_url") or _text("LANGFUSE_BASE_URL:", default="https://cloud.langfuse.com")
         codex_cfg = codex.enable_langfuse(codex_cfg, public_key, secret_key, base_url)
     elif provider == "otlp":
-        endpoint = _text("OTEL_EXPORTER_OTLP_ENDPOINT:")
-        headers = _text("OTEL_EXPORTER_OTLP_HEADERS (k=v,k=v):")
+        endpoint = merged_section.get("endpoint") or _text("OTEL_EXPORTER_OTLP_ENDPOINT:")
+        headers = merged_section.get("headers") or _text("OTEL_EXPORTER_OTLP_HEADERS (k=v,k=v):")
         codex_cfg = codex.enable_otlp(codex_cfg, endpoint, headers)
     else:
         console.print(f"[red]Provider '{provider}' is not supported for codex. Use langfuse or otlp.[/red]")
