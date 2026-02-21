@@ -1,6 +1,7 @@
 """CLI for cc-tracing-hooks."""
 
 import argparse
+import getpass
 import os
 import sys
 
@@ -48,7 +49,8 @@ def cmd_enable(args: argparse.Namespace) -> int:
 
     for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"]:
         if not s.get_env(cfg, key):
-            value = input(f"  {key}: ").strip()
+            prompt_fn = getpass.getpass if "SECRET" in key else input
+            value = prompt_fn(f"  {key}: ").strip()
             if value:
                 cfg = s.set_env(cfg, key, value)
 
@@ -130,7 +132,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         cfg = s.set_env(cfg, "TRACE_TO_LANGFUSE", "true")
     for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]:
         if not env.get(key):
-            value = input(f"  {key}: ").strip()
+            prompt_fn = getpass.getpass if "SECRET" in key else input
+            value = prompt_fn(f"  {key}: ").strip()
             if value:
                 cfg = s.set_env(cfg, key, value)
     s.save_settings(cfg, scope)

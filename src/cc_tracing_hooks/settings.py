@@ -1,6 +1,7 @@
 """Read/write Claude Code settings for hook and env management."""
 
 import json
+import os
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -38,7 +39,11 @@ def save_settings(settings: Dict[str, Any], scope: Scope) -> None:
     path = settings_path(scope)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    finally:
+        os.close(fd)
     tmp.replace(path)
 
 
