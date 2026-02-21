@@ -11,10 +11,10 @@ AI coding tools tracing hooks for observability.
 
 ```bash
 mise use -g pipx:otel-hooks
-```
-
-```bash
+# or
 pip install otel-hooks
+# or
+pipx otel-hooks
 ```
 
 ## Supported tools
