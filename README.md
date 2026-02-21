@@ -1,7 +1,7 @@
 # otel-hooks
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/HikaruEgashira/otel-hooks/badge)](https://scorecard.dev/viewer/?uri=github.com/HikaruEgashira/otel-hooks)
-[![PyPI](https://img.shields.io/pypi/v/otel-hooks)](https://pypi.org/project/otel-hooks/)
+[![PyPI](https://img.shields.io/pypi/v/otel-hooks?cache=break)](https://pypi.org/project/otel-hooks/)
 
 Send Claude Code session traces to [Langfuse](https://langfuse.com).
 
