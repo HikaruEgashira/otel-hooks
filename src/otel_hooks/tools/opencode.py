@@ -11,7 +11,8 @@ from typing import Any, Dict
 from . import HookEvent, Scope, _extract_transcript_path, register_tool
 
 PLUGIN_FILE = "otel-hooks.js"
-PLUGIN_DIR = Path(".opencode") / "plugins"
+PLUGIN_DIR_PROJECT = Path(".opencode") / "plugins"
+PLUGIN_DIR_GLOBAL = Path("~/.config/opencode/plugins").expanduser()
 PLUGIN_MARKER = "otel-hooks-opencode-plugin-v1"
 PLUGIN_SCRIPT = f"""// {PLUGIN_MARKER}
 import {{ appendFileSync, mkdirSync }} from "node:fs"
@@ -192,10 +193,12 @@ class OpenCodeConfig:
         return "opencode"
 
     def scopes(self) -> list[Scope]:
-        return [Scope.PROJECT]
+        return [Scope.GLOBAL, Scope.PROJECT]
 
     def settings_path(self, scope: Scope) -> Path:
-        return Path.cwd() / PLUGIN_DIR / PLUGIN_FILE
+        if scope is Scope.GLOBAL:
+            return PLUGIN_DIR_GLOBAL / PLUGIN_FILE
+        return Path.cwd() / PLUGIN_DIR_PROJECT / PLUGIN_FILE
 
     def load_settings(self, scope: Scope) -> Dict[str, Any]:
         path = self.settings_path(scope)
