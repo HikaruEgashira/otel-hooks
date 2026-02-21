@@ -1,16 +1,16 @@
 # otel-hooks
 
-AI coding tool の操作をOpenTelemetryトレースとして記録するCLI/hookツール。
+CLI/hook tool that records AI coding tool operations as OpenTelemetry traces.
 
-## 主要インターフェース
+## Key Interfaces
 
-- **Provider Protocol** (`providers/__init__.py`): `emit_turn`, `flush`, `shutdown` — 全provider (Langfuse/OTLP/Datadog) が実装
-- **ToolConfig Protocol** (`tools/__init__.py`): `@register_tool` デコレータで登録。実装パターンは3種: JSON設定+Hook / JSONコマンド配列 / スクリプトベース
+- **Provider Protocol** (`providers/__init__.py`): `emit_turn`, `flush`, `shutdown` — implemented by all providers (Langfuse/OTLP/Datadog)
+- **ToolConfig Protocol** (`tools/__init__.py`): registered via `@register_tool`. Three patterns: JSON settings+Hook / JSON command array / script-based
 
-## データフロー
+## Data Flow
 
-stdin JSON → `read_hook_payload()` → `detect_tool()` → `read_new_jsonl()` (差分読み込み) → `build_turns()` → `Provider.emit_turn()` → flush/shutdown
+stdin JSON → `read_hook_payload()` → `detect_tool()` → `read_new_jsonl()` (incremental) → `build_turns()` → `Provider.emit_turn()` → flush/shutdown
 
-## テスト
+## Tests
 
-テストは未整備（テストファイル・pytest依存・CIテストジョブいずれも無い）
+No test infrastructure (no test files, no pytest dependency, no CI test jobs)
