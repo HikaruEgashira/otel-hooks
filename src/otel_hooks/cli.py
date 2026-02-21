@@ -12,18 +12,23 @@ from .settings import Scope
 def _resolve_scope(args: argparse.Namespace) -> Scope:
     if getattr(args, "global_", False):
         return Scope.GLOBAL
+    if getattr(args, "project", False):
+        return Scope.PROJECT
     if getattr(args, "local", False):
         return Scope.LOCAL
 
     accessible = os.environ.get("ACCESSIBLE")
     if accessible:
-        print("Scope: [g]lobal (~/.claude/settings.json) or [l]ocal (.claude/settings.local.json)?")
+        print("Scope: [g]lobal, [p]roject, or [l]ocal?")
     else:
         print("Where should hooks be configured?")
-        print("  [g] global  (~/.claude/settings.json)")
-        print("  [l] local   (.claude/settings.local.json)")
+        print("  [g] global   (~/.claude/settings.json)")
+        print("  [p] project  (.claude/settings.json)")
+        print("  [l] local    (.claude/settings.local.json)")
 
-    choice = input("Select [g/l]: ").strip().lower()
+    choice = input("Select [g/p/l]: ").strip().lower()
+    if choice in ("p", "project"):
+        return Scope.PROJECT
     if choice in ("l", "local"):
         return Scope.LOCAL
     return Scope.GLOBAL
@@ -33,6 +38,8 @@ def _add_scope_flags(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--global", dest="global_", action="store_true",
                        help="Write to ~/.claude/settings.json")
+    group.add_argument("--project", action="store_true",
+                       help="Write to .claude/settings.json (shared with team)")
     group.add_argument("--local", action="store_true",
                        help="Write to .claude/settings.local.json")
 
@@ -49,6 +56,9 @@ def cmd_enable(args: argparse.Namespace) -> int:
 
     for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"]:
         if not s.get_env(cfg, key):
+            if "SECRET" in key and scope is Scope.PROJECT:
+                print(f"  {key}: skipped (use --local or --global for secrets)")
+                continue
             prompt_fn = getpass.getpass if "SECRET" in key else input
             value = prompt_fn(f"  {key}: ").strip()
             if value:

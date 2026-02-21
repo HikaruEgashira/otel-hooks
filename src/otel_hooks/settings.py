@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 class Scope(str, Enum):
     GLOBAL = "global"
+    PROJECT = "project"
     LOCAL = "local"
 
 
@@ -25,6 +26,8 @@ ENV_KEYS = [
 def settings_path(scope: Scope) -> Path:
     if scope is Scope.GLOBAL:
         return Path.home() / ".claude" / "settings.json"
+    if scope is Scope.PROJECT:
+        return Path.cwd() / ".claude" / "settings.json"
     return Path.cwd() / ".claude" / "settings.local.json"
 
 
