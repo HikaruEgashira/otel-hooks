@@ -29,6 +29,17 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.session_id, "c1")
         self.assertEqual(event.transcript_path.name, "cursor.jsonl")
 
+    def test_parse_hook_event_prefers_cursor_when_payload_is_ambiguous(self) -> None:
+        payload = {
+            "conversation_id": "cursor-1",
+            "sessionId": "claude-1",
+            "transcriptPath": "./shared.jsonl",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source_tool, "cursor")
+        self.assertEqual(event.session_id, "cursor-1")
+
     def test_parse_hook_event_cursor_without_transcript(self) -> None:
         event = parse_hook_event({"conversation_id": "c1"})
         self.assertIsNotNone(event)
@@ -63,6 +74,18 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source_tool, "gemini")
         self.assertEqual(event.session_id, "g1")
         self.assertIsNone(event.transcript_path)
+
+    def test_parse_hook_event_prefers_gemini_over_claude_when_session_id_and_timestamp_exist(self) -> None:
+        payload = {
+            "session_id": "g2",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "transcript_path": "./gemini.jsonl",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source_tool, "gemini")
+        self.assertEqual(event.session_id, "g2")
+        self.assertEqual(event.transcript_path.name, "gemini.jsonl")
 
 
 if __name__ == "__main__":
