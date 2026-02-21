@@ -89,6 +89,30 @@ class CliBehaviorTest(unittest.TestCase):
         self.assertEqual(saved_cfg["data"]["provider"], "datadog")
         self.assertNotIn("enabled", saved_cfg["data"])
 
+    def test_cmd_enable_all_writes_provider_config_once(self) -> None:
+        claude = _StubTool(scopes=[Scope.PROJECT])
+        cursor = _StubTool(scopes=[Scope.PROJECT])
+        tools = {"claude": claude, "cursor": cursor}
+        save_calls: list[tuple[dict[str, object], Scope]] = []
+
+        with patch("otel_hooks.cli.TOOLS", ["claude", "cursor"]), patch(
+            "otel_hooks.cli.get_tool",
+            side_effect=lambda name: tools[name],
+        ), patch("otel_hooks.cli.cfg.load_raw_config", return_value={}), patch(
+            "otel_hooks.cli.cfg.env_keys_for_provider", return_value=[]
+        ), patch(
+            "otel_hooks.cli.cfg.save_config",
+            side_effect=lambda data, scope: save_calls.append((data, scope)),
+        ):
+            rc = cli.cmd_enable(_args(tool="all", provider="datadog"))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(claude.register_called, 1)
+        self.assertEqual(cursor.register_called, 1)
+        self.assertEqual(len(save_calls), 1)
+        self.assertEqual(save_calls[0][1], Scope.PROJECT)
+        self.assertEqual(save_calls[0][0]["provider"], "datadog")
+
     def test_cmd_disable_unregisters_hook_without_touching_otel_config(self) -> None:
         tool = _StubTool(registered=True, scopes=[Scope.PROJECT])
 
@@ -121,6 +145,30 @@ class CliBehaviorTest(unittest.TestCase):
         self.assertEqual(saved_cfg["scope"], Scope.PROJECT)
         self.assertNotIn("enabled", saved_cfg["data"])
         self.assertEqual(saved_cfg["data"]["provider"], "datadog")
+
+    def test_doctor_all_yes_fixes_provider_once_and_repairs_all_hooks(self) -> None:
+        claude = _StubTool(registered=False, scopes=[Scope.PROJECT])
+        cursor = _StubTool(registered=False, scopes=[Scope.PROJECT])
+        tools = {"claude": claude, "cursor": cursor}
+        save_calls: list[tuple[dict[str, object], Scope]] = []
+
+        with patch("otel_hooks.cli.TOOLS", ["claude", "cursor"]), patch(
+            "otel_hooks.cli.get_tool",
+            side_effect=lambda name: tools[name],
+        ), patch("otel_hooks.cli.cfg.load_config", return_value={}), patch(
+            "otel_hooks.cli.cfg.load_raw_config", return_value={}
+        ), patch("otel_hooks.cli.cfg.env_keys_for_provider", return_value=[]), patch(
+            "otel_hooks.cli.cfg.save_config",
+            side_effect=lambda data, scope: save_calls.append((data, scope)),
+        ):
+            rc = cli.cmd_doctor(_args(tool="all", provider="datadog", yes=True))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(claude.register_called, 1)
+        self.assertEqual(cursor.register_called, 1)
+        self.assertEqual(len(save_calls), 1)
+        self.assertEqual(save_calls[0][1], Scope.PROJECT)
+        self.assertEqual(save_calls[0][0]["provider"], "datadog")
 
     def test_doctor_fixes_via_tui_confirm(self) -> None:
         tool = _StubTool(registered=False, scopes=[Scope.PROJECT])

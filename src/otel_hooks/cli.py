@@ -2,7 +2,9 @@
 
 import argparse
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from importlib.metadata import version
+from typing import Callable
 
 import questionary
 from rich.console import Console
@@ -98,6 +100,69 @@ def _resolve_provider(args: argparse.Namespace) -> str:
     return _select("Which provider?", PROVIDERS, "--provider")
 
 
+def _clone_args(args: argparse.Namespace, **overrides: object) -> argparse.Namespace:
+    values = vars(args).copy()
+    values.update(overrides)
+    return argparse.Namespace(**values)
+
+
+def _run_tool_actions(
+    tools: list[str],
+    action: Callable[[str], int],
+    *,
+    failure_label: str,
+    parallel: bool,
+) -> int:
+    rc = 0
+    if not parallel or len(tools) <= 1:
+        for tool_name in tools:
+            try:
+                rc |= action(tool_name)
+            except Exception as e:
+                console.print(f"[yellow]Warning:[/yellow] failed to {failure_label} {tool_name}: {e}")
+                rc = 1
+        return rc
+
+    with ThreadPoolExecutor(max_workers=min(8, len(tools))) as ex:
+        futures = {ex.submit(action, tool_name): tool_name for tool_name in tools}
+        for fut in as_completed(futures):
+            tool_name = futures[fut]
+            try:
+                rc |= fut.result()
+            except Exception as e:
+                console.print(f"[yellow]Warning:[/yellow] failed to {failure_label} {tool_name}: {e}")
+                rc = 1
+    return rc
+
+
+def _write_provider_config_for_scope(
+    *,
+    provider: str,
+    config_scope: Scope,
+    skip_project_secrets: bool,
+) -> None:
+    otel_cfg = cfg.load_raw_config(config_scope)
+    otel_cfg["provider"] = provider
+
+    provider_keys = cfg.env_keys_for_provider(provider)
+    if provider_keys:
+        merged = cfg.load_config()
+        merged_section = merged.get(provider, {})
+        section = otel_cfg.setdefault(provider, {})
+        for field, env_var in provider_keys:
+            if section.get(field) or merged_section.get(field):
+                continue
+            if skip_project_secrets and "SECRET" in env_var and config_scope is Scope.PROJECT:
+                console.print(f"  [dim]{env_var}: skipped (use --local or --global for secrets)[/dim]")
+                continue
+            ask_fn = _password if "SECRET" in env_var else _text
+            value = ask_fn(f"{env_var}:")
+            if value:
+                section[field] = value
+
+    cfg.save_config(otel_cfg, config_scope)
+
+
 def _add_scope_flags(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--global", dest="global_", action="store_true",
@@ -142,73 +207,90 @@ def _enable_codex(args: argparse.Namespace) -> int:
     return 0
 
 
-def _enable_one(tool_name: str, args: argparse.Namespace) -> int:
+def _enable_one(
+    tool_name: str,
+    args: argparse.Namespace,
+    *,
+    provider: str,
+    show_status: bool,
+) -> int:
     if tool_name == "codex":
-        return _enable_codex(args)
+        return _enable_codex(_clone_args(args, provider=provider))
 
     tool_cfg = get_tool(tool_name)
     scope = _resolve_scope(args, tool_cfg)
-    provider = _resolve_provider(args)
+    config_scope = Scope.PROJECT if scope is Scope.PROJECT else Scope.GLOBAL
 
-    with console.status(f"Enabling {tool_name} ({scope.value}, provider={provider})..."):
+    def _register_hook() -> None:
         tool_settings = tool_cfg.load_settings(scope)
         tool_settings = tool_cfg.register_hook(tool_settings)
         tool_cfg.save_settings(tool_settings, scope)
 
-        config_scope = Scope.PROJECT if scope is Scope.PROJECT else Scope.GLOBAL
-        otel_cfg = cfg.load_raw_config(config_scope)
-        otel_cfg["provider"] = provider
+    if show_status:
+        with console.status(f"Enabling {tool_name} ({scope.value}, provider={provider})..."):
+            _register_hook()
+    else:
+        _register_hook()
 
-    provider_keys = cfg.env_keys_for_provider(provider)
-    if provider_keys:
-        merged = cfg.load_config()
-        merged_section = merged.get(provider, {})
-        section = otel_cfg.setdefault(provider, {})
-        for field, env_var in provider_keys:
-            if not section.get(field) and not merged_section.get(field):
-                if "SECRET" in env_var and scope is Scope.PROJECT:
-                    console.print(f"  [dim]{env_var}: skipped (use --local or --global for secrets)[/dim]")
-                    continue
-                ask_fn = _password if "SECRET" in env_var else _text
-                value = ask_fn(f"{env_var}:")
-                if value:
-                    section[field] = value
-
-    cfg.save_config(otel_cfg, config_scope)
     console.print(f"[green]Enabled.[/green] Hook: {tool_cfg.settings_path(scope)}, Config: {cfg.config_path(config_scope)}")
     return 0
 
 
 def cmd_enable(args: argparse.Namespace) -> int:
     tools = _resolve_tools(args)
-    rc = 0
+    provider = _resolve_provider(args)
+    resolved_args = _clone_args(args, provider=provider)
+
+    config_scopes: set[Scope] = set()
     for tool_name in tools:
-        try:
-            rc |= _enable_one(tool_name, args)
-        except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] failed to enable {tool_name}: {e}")
-            rc = 1
-    return rc
+        if tool_name == "codex":
+            continue
+        tool_cfg = get_tool(tool_name)
+        scope = _resolve_scope(resolved_args, tool_cfg)
+        config_scopes.add(Scope.PROJECT if scope is Scope.PROJECT else Scope.GLOBAL)
+
+    for config_scope in (Scope.GLOBAL, Scope.PROJECT):
+        if config_scope not in config_scopes:
+            continue
+        _write_provider_config_for_scope(
+            provider=provider,
+            config_scope=config_scope,
+            skip_project_secrets=True,
+        )
+
+    return _run_tool_actions(
+        tools,
+        lambda tool_name: _enable_one(
+            tool_name,
+            resolved_args,
+            provider=provider,
+            show_status=len(tools) == 1,
+        ),
+        failure_label="enable",
+        parallel=len(tools) > 1,
+    )
+
+
+def _disable_one(tool_name: str, args: argparse.Namespace) -> int:
+    tool_cfg = get_tool(tool_name)
+    scope = _resolve_scope(args, tool_cfg)
+
+    tool_settings = tool_cfg.load_settings(scope)
+    tool_settings = tool_cfg.unregister_hook(tool_settings)
+    tool_cfg.save_settings(tool_settings, scope)
+
+    console.print(f"[green]Disabled.[/green] {tool_cfg.settings_path(scope)}")
+    return 0
 
 
 def cmd_disable(args: argparse.Namespace) -> int:
     tools = _resolve_tools(args)
-    rc = 0
-    for tool_name in tools:
-        try:
-            tool_cfg = get_tool(tool_name)
-            scope = _resolve_scope(args, tool_cfg)
-
-            tool_settings = tool_cfg.load_settings(scope)
-            tool_settings = tool_cfg.unregister_hook(tool_settings)
-            tool_cfg.save_settings(tool_settings, scope)
-
-            console.print(f"[green]Disabled.[/green] {tool_cfg.settings_path(scope)}")
-        except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] failed to disable {tool_name}: {e}")
-            rc = 1
-
-    return rc
+    return _run_tool_actions(
+        tools,
+        lambda tool_name: _disable_one(tool_name, args),
+        failure_label="disable",
+        parallel=len(tools) > 1,
+    )
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -248,31 +330,49 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def _doctor_one(tool_name: str, args: argparse.Namespace) -> int:
+def _collect_provider_issues(otel_config: dict[str, object]) -> tuple[str | None, list[str]]:
+    issues: list[str] = []
+    provider_raw = otel_config.get("provider")
+    provider = provider_raw if isinstance(provider_raw, str) and provider_raw else None
+
+    if not provider:
+        issues.append("provider not set in otel-hooks config")
+        return None, issues
+
+    if provider == "langfuse":
+        pcfg = otel_config.get("langfuse", {})
+        if isinstance(pcfg, dict):
+            if not pcfg.get("public_key"):
+                issues.append("langfuse.public_key not set")
+            if not pcfg.get("secret_key"):
+                issues.append("langfuse.secret_key not set")
+    elif provider == "otlp":
+        pcfg = otel_config.get("otlp", {})
+        if isinstance(pcfg, dict) and not pcfg.get("endpoint"):
+            issues.append("otlp.endpoint not set")
+
+    return provider, issues
+
+
+def _doctor_one(
+    tool_name: str,
+    args: argparse.Namespace,
+    *,
+    include_provider_checks: bool = True,
+    fix_provider_config: bool = True,
+) -> int:
     tool_cfg = get_tool(tool_name)
     scope = tool_cfg.scopes()[0]
     tool_settings = tool_cfg.load_settings(scope)
     issues: list[str] = []
+    provider: str | None = None
 
     if not tool_cfg.is_hook_registered(tool_settings):
         issues.append(f"Hook not registered in {tool_cfg.settings_path(scope)}")
 
-    otel_config = cfg.load_config()
-    provider = otel_config.get("provider")
-
-    if not provider:
-        issues.append("provider not set in otel-hooks config")
-
-    if provider == "langfuse":
-        pcfg = otel_config.get("langfuse", {})
-        if not pcfg.get("public_key"):
-            issues.append("langfuse.public_key not set")
-        if not pcfg.get("secret_key"):
-            issues.append("langfuse.secret_key not set")
-    elif provider == "otlp":
-        pcfg = otel_config.get("otlp", {})
-        if not pcfg.get("endpoint"):
-            issues.append("otlp.endpoint not set")
+    if include_provider_checks:
+        provider, provider_issues = _collect_provider_issues(cfg.load_config())
+        issues.extend(provider_issues)
 
     if not issues:
         console.print(f"[green]{tool_name}: No issues found.[/green]")
@@ -292,35 +392,61 @@ def _doctor_one(tool_name: str, args: argparse.Namespace) -> int:
         tool_cfg.save_settings(tool_settings, scope)
 
     # Fix otel-hooks config
-    config_scope = Scope.PROJECT if getattr(args, "project", False) else Scope.GLOBAL
-    otel_cfg = cfg.load_raw_config(config_scope)
-    if not provider:
-        provider = _resolve_provider(args)
-    otel_cfg["provider"] = provider
+    if include_provider_checks and fix_provider_config:
+        config_scope = Scope.PROJECT if getattr(args, "project", False) else Scope.GLOBAL
+        if not provider:
+            provider = _resolve_provider(args)
+        _write_provider_config_for_scope(
+            provider=provider,
+            config_scope=config_scope,
+            skip_project_secrets=False,
+        )
 
-    for field, env_var in cfg.env_keys_for_provider(provider or ""):
-        section = otel_cfg.setdefault(provider, {})
-        if not section.get(field):
-            ask_fn = _password if "SECRET" in env_var else _text
-            value = ask_fn(f"{env_var}:")
-            if value:
-                section[field] = value
-
-    cfg.save_config(otel_cfg, config_scope)
     console.print("[green]Fixed.[/green]")
     return 0
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     tools = _resolve_tools(args)
-    rc = 0
-    for tool_name in tools:
-        try:
-            rc |= _doctor_one(tool_name, args)
-        except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] failed to check {tool_name}: {e}")
-            rc = 1
-    return rc
+    if len(tools) == 1:
+        return _run_tool_actions(
+            tools,
+            lambda tool_name: _doctor_one(tool_name, args),
+            failure_label="check",
+            parallel=False,
+        )
+
+    provider, provider_issues = _collect_provider_issues(cfg.load_config())
+    if provider_issues:
+        console.print(f"[yellow]config: Found {len(provider_issues)} issue(s):[/yellow]")
+        for issue in provider_issues:
+            console.print(f"  [red]- {issue}[/red]")
+        yes = getattr(args, "yes", False)
+        if not yes and not _confirm("Fix automatically?"):
+            return 1
+        if not provider:
+            provider = _resolve_provider(args)
+        config_scope = Scope.PROJECT if getattr(args, "project", False) else Scope.GLOBAL
+        _write_provider_config_for_scope(
+            provider=provider,
+            config_scope=config_scope,
+            skip_project_secrets=False,
+        )
+        console.print("[green]config: Fixed.[/green]")
+
+    # --yes 指定時のみ doctor を並列化（対話プロンプト競合を回避）
+    parallel = bool(getattr(args, "yes", False))
+    return _run_tool_actions(
+        tools,
+        lambda tool_name: _doctor_one(
+            tool_name,
+            args,
+            include_provider_checks=False,
+            fix_provider_config=False,
+        ),
+        failure_label="check",
+        parallel=parallel,
+    )
 
 
 def cmd_hook(_args: argparse.Namespace) -> int:
