@@ -11,27 +11,33 @@ from .settings import Scope
 from .tools import available_tools, get_tool, ToolConfig
 
 
-PROVIDERS = ["langfuse", "otlp"]
+PROVIDERS = ["langfuse", "otlp", "datadog"]
 TOOLS = ["claude", "cursor", "codex", "opencode", "copilot", "gemini", "kiro", "cline"]
+TOOL_CHOICES = [*TOOLS, "all"]
 
 
-def _resolve_tool(args: argparse.Namespace) -> str:
+def _resolve_tools(args: argparse.Namespace) -> list[str]:
+    """Return list of tool names to operate on."""
     tool = getattr(args, "tool", None)
+    if tool == "all":
+        return list(TOOLS)
     if tool:
-        return tool
+        return [tool]
 
     print("Which tool?")
-    for i, t in enumerate(TOOLS, 1):
+    for i, t in enumerate(TOOL_CHOICES, 1):
         print(f"  [{i}] {t}")
-    choice = input(f"Select [1-{len(TOOLS)}]: ").strip()
+    choice = input(f"Select [1-{len(TOOL_CHOICES)}]: ").strip()
     try:
         idx = int(choice) - 1
-        if 0 <= idx < len(TOOLS):
-            return TOOLS[idx]
+        if 0 <= idx < len(TOOL_CHOICES):
+            selected = TOOL_CHOICES[idx]
+            return list(TOOLS) if selected == "all" else [selected]
     except ValueError:
-        if choice.lower() in TOOLS:
-            return choice.lower()
-    return "claude"
+        if choice.lower() in TOOL_CHOICES:
+            selected = choice.lower()
+            return list(TOOLS) if selected == "all" else [selected]
+    return ["claude"]
 
 
 def _resolve_scope(args: argparse.Namespace, tool_cfg: ToolConfig | None = None) -> Scope:
@@ -81,7 +87,8 @@ def _add_scope_flags(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_tool_flag(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--tool", choices=TOOLS, help="Target tool (claude, cursor, codex)")
+    parser.add_argument("--tool", choices=TOOL_CHOICES,
+                        help="Target tool (claude, cursor, codex, ... or 'all')")
 
 
 def _enable_codex(args: argparse.Namespace) -> int:
@@ -109,9 +116,7 @@ def _enable_codex(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_enable(args: argparse.Namespace) -> int:
-    tool_name = _resolve_tool(args)
-
+def _enable_one(tool_name: str, args: argparse.Namespace) -> int:
     if tool_name == "codex":
         return _enable_codex(args)
 
@@ -144,34 +149,49 @@ def cmd_enable(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_enable(args: argparse.Namespace) -> int:
+    tools = _resolve_tools(args)
+    rc = 0
+    for tool_name in tools:
+        try:
+            rc |= _enable_one(tool_name, args)
+        except Exception as e:
+            print(f"Warning: failed to enable {tool_name}: {e}")
+            rc = 1
+    return rc
+
+
 def cmd_disable(args: argparse.Namespace) -> int:
-    tool_name = _resolve_tool(args)
-    tool_cfg = get_tool(tool_name)
-    scope = _resolve_scope(args, tool_cfg)
-    print(f"Disabling tracing hooks for {tool_name} ({scope.value})...")
+    tools = _resolve_tools(args)
+    rc = 0
+    for tool_name in tools:
+        try:
+            tool_cfg = get_tool(tool_name)
+            scope = _resolve_scope(args, tool_cfg)
+            print(f"Disabling tracing hooks for {tool_name} ({scope.value})...")
 
-    cfg = tool_cfg.load_settings(scope)
-    cfg = tool_cfg.unregister_hook(cfg)
+            cfg = tool_cfg.load_settings(scope)
+            cfg = tool_cfg.unregister_hook(cfg)
 
-    if tool_name == "claude":
-        cfg = tool_cfg.set_env(cfg, "OTEL_HOOKS_ENABLED", "false")
+            if tool_name == "claude":
+                cfg = tool_cfg.set_env(cfg, "OTEL_HOOKS_ENABLED", "false")
 
-    tool_cfg.save_settings(cfg, scope)
-    print(f"Disabled. Settings written to {tool_cfg.settings_path(scope)}")
-    return 0
+            tool_cfg.save_settings(cfg, scope)
+            print(f"Disabled. Settings written to {tool_cfg.settings_path(scope)}")
+        except Exception as e:
+            print(f"Warning: failed to disable {tool_name}: {e}")
+            rc = 1
+    return rc
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    tool_name = getattr(args, "tool", None)
+    tool = getattr(args, "tool", None)
+    tools = list(TOOLS) if not tool or tool == "all" else [tool]
 
-    if tool_name:
-        _print_tool_status(tool_name)
-        return 0
-
-    # Show all tools
-    for name in available_tools():
+    for i, name in enumerate(tools):
         _print_tool_status(name)
-        print()
+        if i < len(tools) - 1:
+            print()
     return 0
 
 
@@ -197,9 +217,7 @@ def _print_tool_status(tool_name: str) -> None:
                 print(f"    {key}: {masked or '(not set)'}")
 
 
-def cmd_doctor(args: argparse.Namespace) -> int:
-    tool_name = _resolve_tool(args)
-
+def _doctor_one(tool_name: str, args: argparse.Namespace) -> int:
     if tool_name != "claude":
         tool_cfg = get_tool(tool_name)
         scope = tool_cfg.scopes()[0]
@@ -233,6 +251,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     elif provider == "otlp":
         if not env.get("OTEL_EXPORTER_OTLP_ENDPOINT"):
             issues.append("OTEL_EXPORTER_OTLP_ENDPOINT not set")
+    elif provider == "datadog":
+        pass  # DD_SERVICE/DD_ENV are optional; ddtrace connects to local agent by default
 
     if not issues:
         print("No issues found.")
@@ -263,6 +283,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     s.save_settings(cfg, scope)
     print("Fixed.")
     return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    tools = _resolve_tools(args)
+    rc = 0
+    for tool_name in tools:
+        try:
+            rc |= _doctor_one(tool_name, args)
+        except Exception as e:
+            print(f"Warning: failed to check {tool_name}: {e}")
+            rc = 1
+    return rc
 
 
 def cmd_hook(_args: argparse.Namespace) -> int:
