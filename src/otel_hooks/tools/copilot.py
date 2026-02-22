@@ -12,7 +12,6 @@ from typing import Any, Dict
 from . import HookEvent, Scope, register_tool
 from .json_io import load_json, save_json
 
-HOOK_COMMAND = "OTEL_HOOKS_SOURCE_TOOL=copilot otel-hooks hook"
 HOOKS_FILE = "otel-hooks.json"
 _HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "sessionEnd")
 _EVENT_ALIASES = {
@@ -59,7 +58,7 @@ class CopilotConfig:
 
     def register_hook(self, settings: Dict[str, Any], command: str | None = None) -> Dict[str, Any]:
         base_cmd = command or "otel-hooks hook"
-        cmd = f"OTEL_HOOKS_SOURCE_TOOL=copilot {base_cmd}"
+        cmd = f"{base_cmd} --tool copilot"
         settings.setdefault("version", 1)
         hooks = settings.setdefault("hooks", {})
         for event_name in _HOOK_EVENTS:

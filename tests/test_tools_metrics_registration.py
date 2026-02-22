@@ -4,8 +4,11 @@ import tests._path_setup  # noqa: F401
 
 import unittest
 
-from otel_hooks.tools.copilot import CopilotConfig, HOOK_COMMAND as COPILOT_HOOK_COMMAND
-from otel_hooks.tools.kiro import KiroConfig, HOOK_COMMAND as KIRO_HOOK_COMMAND
+from otel_hooks.tools.copilot import CopilotConfig
+from otel_hooks.tools.kiro import KiroConfig
+
+COPILOT_HOOK_COMMAND = "otel-hooks hook --tool copilot"
+KIRO_HOOK_COMMAND = "otel-hooks hook --tool kiro"
 
 
 class MetricsHookRegistrationTest(unittest.TestCase):

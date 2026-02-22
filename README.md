@@ -46,7 +46,7 @@ otel-hooks disable --tool <name>
 
 For metrics-only tools, `otel-hooks` registers all observable hook events (not only end events) to avoid data gaps.
 
-`preToolUse` / `postToolUse` event names can overlap across tools. `otel-hooks` injects `source_tool` via `OTEL_HOOKS_SOURCE_TOOL` at hook execution time to keep payload adapter selection deterministic.
+`preToolUse` / `postToolUse` event names can overlap across tools. `otel-hooks` injects `source_tool` via the `--tool` CLI flag at hook execution time to keep payload adapter selection deterministic.
 
 ## Configuration
 

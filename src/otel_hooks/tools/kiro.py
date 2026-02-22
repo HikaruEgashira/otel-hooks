@@ -10,7 +10,6 @@ from typing import Any, Dict
 from . import HookEvent, Scope, register_tool
 from .json_io import load_json, save_json
 
-HOOK_COMMAND = "OTEL_HOOKS_SOURCE_TOOL=kiro otel-hooks hook"
 AGENT_FILE = "default.json"
 _HOOK_EVENTS = ("userPromptSubmit", "preToolUse", "postToolUse", "stop")
 
@@ -48,7 +47,7 @@ class KiroConfig:
 
     def register_hook(self, settings: Dict[str, Any], command: str | None = None) -> Dict[str, Any]:
         base_cmd = command or "otel-hooks hook"
-        cmd = f"OTEL_HOOKS_SOURCE_TOOL=kiro {base_cmd}"
+        cmd = f"{base_cmd} --tool kiro"
         hooks = settings.setdefault("hooks", {})
         for event_name in _HOOK_EVENTS:
             group = hooks.setdefault(event_name, [])

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from datetime import datetime
@@ -60,9 +59,6 @@ def read_hook_payload() -> dict[str, Any]:
         payload: dict[str, Any] = {}
         if data.strip():
             payload = json.loads(data)
-        tool_hint = os.environ.get("OTEL_HOOKS_SOURCE_TOOL", "").strip()
-        if tool_hint and "source_tool" not in payload:
-            payload["source_tool"] = tool_hint
         return payload
     except Exception:
         return {}
@@ -216,13 +212,13 @@ def run_hook(
             pass
 
 
-def _parse_provider_flag() -> str | None:
-    """Extract --provider <name> from sys.argv without interfering with stdin."""
+def _parse_flag(name: str) -> str | None:
+    """Extract --<name> <value> from sys.argv without interfering with stdin."""
     args = sys.argv[1:]
     for i, arg in enumerate(args):
-        if arg == "--provider" and i + 1 < len(args):
+        if arg == f"--{name}" and i + 1 < len(args):
             return args[i + 1]
-        if arg.startswith("--provider="):
+        if arg.startswith(f"--{name}="):
             return arg.split("=", 1)[1]
     return None
 
@@ -235,11 +231,16 @@ def main() -> int:
     except Exception:
         config = {}
 
-    provider = _parse_provider_flag()
+    provider = _parse_flag("provider")
     if provider:
         config["provider"] = provider
 
     payload = read_hook_payload()
+
+    tool_hint = _parse_flag("tool")
+    if tool_hint and "source_tool" not in payload:
+        payload["source_tool"] = tool_hint
+
     return run_hook(payload, config)
 
 

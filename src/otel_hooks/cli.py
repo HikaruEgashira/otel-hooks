@@ -220,6 +220,27 @@ def _enable_codex(args: argparse.Namespace) -> int:
     return 0
 
 
+def _migrate_env_var_to_tool_flag(settings: dict, tool_name: str) -> None:
+    """Rewrite legacy `OTEL_HOOKS_SOURCE_TOOL=<t> cmd` to `cmd --tool <t>`."""
+    import re
+
+    hooks = settings.get("hooks", {})
+    for _event, group in hooks.items():
+        if not isinstance(group, list):
+            continue
+        for item in group:
+            if not isinstance(item, dict):
+                continue
+            for key in ("bash", "command"):
+                cmd = item.get(key, "")
+                if not cmd or "OTEL_HOOKS_SOURCE_TOOL=" not in cmd:
+                    continue
+                new_cmd = re.sub(r"OTEL_HOOKS_SOURCE_TOOL=\S+\s+", "", cmd)
+                if "--tool" not in new_cmd:
+                    new_cmd = f"{new_cmd} --tool {tool_name}"
+                item[key] = new_cmd
+
+
 def _hook_command_for_provider(provider: str) -> str:
     return f"otel-hooks hook --provider {provider}"
 
@@ -469,6 +490,9 @@ def _doctor_one(
     yes = getattr(args, "yes", False)
     if not yes and not _confirm("Fix automatically?"):
         return 1
+
+    # Migrate legacy OTEL_HOOKS_SOURCE_TOOL= prefix to --tool flag
+    _migrate_env_var_to_tool_flag(tool_settings, tool_name)
 
     # Fix hook registration
     if not tool_cfg.is_hook_registered(tool_settings):
