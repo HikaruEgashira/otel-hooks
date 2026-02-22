@@ -245,15 +245,22 @@ def _detect_runner_prefix() -> str:
     """Detect if running via uvx/pipx and return the appropriate command prefix.
 
     argv[0] contains the script path, which reveals the installation method:
-    - uvx: temporary venv path containing 'uvx' → "uvx "
+    - uvx: ephemeral env under .cache/uv/ (not on PATH) → "uvx "
     - pipx: venv path containing 'pipx' → "pipx run "
     - pip install / uv tool install: binary on PATH, no prefix needed
     """
+    import shutil
+
     argv0 = sys.argv[0] if sys.argv else ""
-    if "uvx" in argv0:
-        return "uvx "
+    # pipx stores scripts under pipx/venvs or similar
     if "pipx" in argv0:
         return "pipx run "
+    # uvx ephemeral env: script is under .cache/uv/ and NOT on PATH
+    if ".cache/uv/" in argv0 or ".cache\\uv\\" in argv0:
+        return "uvx "
+    # Not on PATH and uvx is available → likely uvx
+    if not shutil.which("otel-hooks") and shutil.which("uvx"):
+        return "uvx "
     return ""
 
 
