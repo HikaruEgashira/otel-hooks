@@ -58,7 +58,7 @@ class TestConfigure:
         pkg = logging.getLogger(_PACKAGE)
         assert pkg.level == logging.DEBUG
 
-    def test_file_handler_failure_prints_to_stderr(self, tmp_path: Path, capsys):
+    def test_file_handler_failure_prints_to_stderr(self, capsys):
         bad_path = Path("/nonexistent/deeply/nested/dir/test.log")
         with patch("otel_hooks.logging_setup.Path.mkdir", side_effect=OSError("permission denied")):
             configure(bad_path)
