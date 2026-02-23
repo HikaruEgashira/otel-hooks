@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 MAX_CHARS_DEFAULT = 20000
 
@@ -166,5 +169,6 @@ def decode_jsonl_lines(lines: list[str]) -> list[dict[str, Any]]:
         try:
             msgs.append(json.loads(line))
         except Exception:
+            logger.debug("Skipping malformed JSONL line: %.100s", line)
             continue
     return msgs

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_DIR = Path.home() / ".config" / "otel-hooks" / "state"
 
@@ -51,7 +54,7 @@ class FileLock:
                         break
                     time.sleep(0.05)
         except Exception:
-            pass
+            logger.debug("File locking unavailable", exc_info=True)
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -60,11 +63,11 @@ class FileLock:
 
             fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
         except Exception:
-            pass
+            logger.debug("File unlock failed", exc_info=True)
         try:
             self._fh.close()
         except Exception:
-            pass
+            logger.debug("File close failed", exc_info=True)
 
 
 @dataclass
@@ -85,6 +88,7 @@ def load_state(state_file: Path) -> dict[str, Any]:
             return {}
         return json.loads(state_file.read_text(encoding="utf-8"))
     except Exception:
+        logger.debug("Failed to load state from %s", state_file, exc_info=True)
         return {}
 
 
@@ -94,7 +98,7 @@ def save_state(state: dict[str, Any], state_file: Path) -> None:
 
         atomic_write(state_file, json.dumps(state, indent=2, sort_keys=True).encode("utf-8"))
     except Exception:
-        pass
+        logger.warning("Failed to save state to %s", state_file, exc_info=True)
 
 
 
@@ -126,6 +130,7 @@ def read_new_jsonl_lines(transcript_path: Path, ss: SessionState) -> tuple[list[
             chunk = f.read()
             new_offset = f.tell()
     except Exception:
+        logger.debug("Failed to read transcript %s", transcript_path, exc_info=True)
         return [], ss
 
     if not chunk:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def create_provider(name: str, config: dict[str, Any]):
@@ -27,6 +29,7 @@ def create_provider(name: str, config: dict[str, Any]):
                 kwargs["max_chars"] = max_chars
             return LangfuseProvider(public_key=public_key, secret_key=secret_key, host=host, **kwargs)
         except Exception:
+            logger.warning("Failed to create LangfuseProvider", exc_info=True)
             return None
 
     if name == "otlp":
@@ -50,6 +53,7 @@ def create_provider(name: str, config: dict[str, Any]):
                 kwargs["max_chars"] = max_chars
             return OTLPProvider(endpoint=endpoint, headers=headers, **kwargs)
         except Exception:
+            logger.warning("Failed to create OTLPProvider", exc_info=True)
             return None
 
     if name == "datadog":
@@ -65,6 +69,7 @@ def create_provider(name: str, config: dict[str, Any]):
                 kwargs["max_chars"] = max_chars
             return DatadogProvider(service=service, env=env, **kwargs)
         except Exception:
+            logger.warning("Failed to create DatadogProvider", exc_info=True)
             return None
 
     return None
