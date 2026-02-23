@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
 
 
 class Scope(str, Enum):
@@ -156,4 +159,5 @@ def _extract_transcript_path(payload: Dict[str, Any]) -> Path | None:
     try:
         return Path(transcript).expanduser().resolve()
     except Exception:
+        logger.debug("Invalid transcript path %r", transcript, exc_info=True)
         return None

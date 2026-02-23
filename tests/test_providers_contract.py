@@ -202,6 +202,12 @@ def _build_fake_otlp_modules() -> dict[str, types.ModuleType]:
 def _build_fake_ddtrace_module() -> types.ModuleType:
     mod = types.ModuleType("ddtrace")
 
+    class _Config:
+        def __init__(self) -> None:
+            self.service: str | None = None
+
+    mod.config = _Config()
+
     class _Span:
         def __init__(self, sink: list["_Span"], meta: dict[str, object]) -> None:
             self.meta = meta
@@ -310,7 +316,7 @@ class ProviderContractTest(unittest.TestCase):
             provider.shutdown()
 
         tracer = fake_ddtrace.tracer
-        self.assertEqual(tracer.configure_calls, [{"service": "svc"}])
+        self.assertEqual(fake_ddtrace.config.service, "svc")
         self.assertEqual(tracer.set_tags_calls, [{"env": "prod"}])
         self.assertEqual(tracer.spans[0].meta["name"], "ai_session.turn")
         self.assertEqual(tracer.spans[0].tags["source_tool"], "claude")

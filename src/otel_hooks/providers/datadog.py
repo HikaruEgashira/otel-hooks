@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ddtrace import tracer
+from ddtrace import config as dd_config, tracer
 
 from otel_hooks.domain.transcript import MAX_CHARS_DEFAULT, Turn
 from otel_hooks.providers.common import build_turn_payload
@@ -13,7 +13,7 @@ from otel_hooks.providers.common import build_turn_payload
 
 class DatadogProvider:
     def __init__(self, service: str = "otel-hooks", env: str | None = None, *, max_chars: int = MAX_CHARS_DEFAULT) -> None:
-        tracer.configure(service=service)
+        dd_config.service = service
         if env:
             tracer.set_tags({"env": env})
         self._max_chars = max_chars

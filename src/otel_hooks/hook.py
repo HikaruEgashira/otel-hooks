@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from otel_hooks.tools import SupportKind, parse_hook_event
 from otel_hooks.domain.transcript import build_turns, decode_jsonl_lines
@@ -49,7 +52,7 @@ def _resolve_state_paths(config: dict[str, Any]) -> StatePaths:
             base = Path(str(configured)).expanduser().resolve()
             return build_state_paths(base)
         except Exception:
-            pass
+            logger.debug("Invalid state_dir %r, using default", configured, exc_info=True)
     return build_state_paths(DEFAULT_STATE_DIR)
 
 
@@ -61,6 +64,7 @@ def read_hook_payload() -> dict[str, Any]:
             payload = json.loads(data)
         return payload
     except Exception:
+        logger.debug("Failed to read hook payload from stdin", exc_info=True)
         return {}
 
 
@@ -209,7 +213,7 @@ def run_hook(
         try:
             provider.shutdown()
         except Exception:
-            pass
+            logger.debug("provider.shutdown() failed", exc_info=True)
 
 
 def _parse_flag(name: str) -> str | None:
@@ -229,6 +233,7 @@ def main() -> int:
 
         config = load_config()
     except Exception:
+        logger.debug("Failed to load config, using defaults", exc_info=True)
         config = {}
 
     provider = _parse_flag("provider")

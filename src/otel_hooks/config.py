@@ -8,9 +8,12 @@ Merge order: global → project → environment variables (highest priority).
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 from .file_io import atomic_write
 from .tools import Scope
@@ -28,6 +31,7 @@ def _read_json(path: Path) -> Dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        logger.debug("Failed to read config %s", path, exc_info=True)
         return {}
 
 
