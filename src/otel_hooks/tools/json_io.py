@@ -3,23 +3,16 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
 from otel_hooks.file_io import atomic_write
 
-logger = logging.getLogger(__name__)
-
 
 def load_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
     if not path.exists():
         return default.copy() if default is not None else {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.debug("Failed to parse JSON from %s", path, exc_info=True)
-        return default.copy() if default is not None else {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def save_json(path: Path, data: dict[str, Any]) -> None:

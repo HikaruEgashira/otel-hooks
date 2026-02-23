@@ -37,6 +37,7 @@ class FileLock:
         self.path = path
         self.timeout_s = timeout_s
         self._fh = None
+        self._fcntl = None
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,6 +45,7 @@ class FileLock:
         try:
             import fcntl
 
+            self._fcntl = fcntl
             deadline = time.time() + self.timeout_s
             while True:
                 try:
@@ -53,21 +55,14 @@ class FileLock:
                     if time.time() > deadline:
                         break
                     time.sleep(0.05)
-        except Exception:
-            logger.debug("File locking unavailable", exc_info=True)
+        except ImportError:
+            pass
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        try:
-            import fcntl
-
-            fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
-        except Exception:
-            logger.debug("File unlock failed", exc_info=True)
-        try:
-            self._fh.close()
-        except Exception:
-            logger.debug("File close failed", exc_info=True)
+        if self._fcntl is not None:
+            self._fcntl.flock(self._fh.fileno(), self._fcntl.LOCK_UN)
+        self._fh.close()
 
 
 @dataclass
@@ -83,24 +78,15 @@ def state_key(session_id: str, transcript_path: str) -> str:
 
 
 def load_state(state_file: Path) -> dict[str, Any]:
-    try:
-        if not state_file.exists():
-            return {}
-        return json.loads(state_file.read_text(encoding="utf-8"))
-    except Exception:
-        logger.debug("Failed to load state from %s", state_file, exc_info=True)
+    if not state_file.exists():
         return {}
+    return json.loads(state_file.read_text(encoding="utf-8"))
 
 
 def save_state(state: dict[str, Any], state_file: Path) -> None:
-    try:
-        from otel_hooks.file_io import atomic_write
+    from otel_hooks.file_io import atomic_write
 
-        atomic_write(state_file, json.dumps(state, indent=2, sort_keys=True).encode("utf-8"))
-    except Exception:
-        logger.warning("Failed to save state to %s", state_file, exc_info=True)
-
-
+    atomic_write(state_file, json.dumps(state, indent=2, sort_keys=True).encode("utf-8"))
 
 
 def load_session_state(global_state: dict[str, Any], key: str) -> SessionState:
@@ -122,6 +108,7 @@ def write_session_state(global_state: dict[str, Any], key: str, ss: SessionState
 
 
 def read_new_jsonl_lines(transcript_path: Path, ss: SessionState) -> tuple[list[str], SessionState]:
+    """Read new lines from transcript file (written by external AI tools)."""
     if not transcript_path.exists():
         return [], ss
     try:
@@ -136,10 +123,7 @@ def read_new_jsonl_lines(transcript_path: Path, ss: SessionState) -> tuple[list[
     if not chunk:
         return [], ss
 
-    try:
-        text = chunk.decode("utf-8", errors="replace")
-    except Exception:
-        text = chunk.decode(errors="replace")
+    text = chunk.decode("utf-8", errors="replace")
 
     combined = ss.buffer + text
     lines = combined.split("\n")
