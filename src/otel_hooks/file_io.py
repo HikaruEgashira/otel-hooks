@@ -20,13 +20,3 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
     finally:
         os.close(fd)
     tmp.replace(path)
-
-
-def append_line(path: Path, line: str, mode: int = 0o600) -> None:
-    """Append a line with explicit file permissions."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, mode)
-    try:
-        os.write(fd, line.encode("utf-8"))
-    finally:
-        os.close(fd)

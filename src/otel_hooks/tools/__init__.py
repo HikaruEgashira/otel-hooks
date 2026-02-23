@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import importlib
-import logging
 import pkgutil
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Protocol, runtime_checkable
-
-logger = logging.getLogger(__name__)
+from typing import Any, Dict, Protocol, runtime_checkable
 
 
 class Scope(str, Enum):
@@ -122,7 +119,7 @@ _PARSE_ORDER: tuple[str, ...] = ("opencode", "cursor", "gemini", "kiro", "copilo
 
 
 def parse_hook_event(
-    payload: Dict[str, Any], warn_fn: Callable[[str], None] | None = None
+    payload: Dict[str, Any],
 ) -> HookEvent | None:
     """Parse tool payload into a normalized HookEvent via registered adapters."""
     _ensure_registered()
@@ -156,8 +153,4 @@ def _extract_transcript_path(payload: Dict[str, Any]) -> Path | None:
     )
     if not transcript:
         return None
-    try:
-        return Path(transcript).expanduser().resolve()
-    except Exception:
-        logger.debug("Invalid transcript path %r", transcript, exc_info=True)
-        return None
+    return Path(transcript).expanduser().resolve()

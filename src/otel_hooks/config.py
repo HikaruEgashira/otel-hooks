@@ -28,11 +28,7 @@ def config_path(scope: Scope) -> Path:
 def _read_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.debug("Failed to read config %s", path, exc_info=True)
-        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # Mapping: config key → (section, field) → env var name
@@ -92,7 +88,7 @@ def _apply_env_overrides(merged: Dict[str, Any]) -> None:
                 try:
                     merged[config_key] = int(val)
                 except ValueError:
-                    pass
+                    logger.warning("Invalid %s value %r; ignoring", env_var, val)
             elif config_key == "debug":
                 merged[config_key] = val.lower() == "true"
             else:

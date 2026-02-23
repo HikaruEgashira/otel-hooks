@@ -17,11 +17,13 @@ def create_provider(name: str, config: dict[str, Any]):
         try:
             from otel_hooks.providers.langfuse import LangfuseProvider
         except ImportError:
+            logger.warning("langfuse package not installed; install with: pip install langfuse")
             return None
         public_key = pcfg.get("public_key")
         secret_key = pcfg.get("secret_key")
         host = pcfg.get("base_url", "https://cloud.langfuse.com")
         if not public_key or not secret_key:
+            logger.warning("langfuse provider requires public_key and secret_key")
             return None
         try:
             kwargs: dict[str, Any] = {}
@@ -36,9 +38,14 @@ def create_provider(name: str, config: dict[str, Any]):
         try:
             from otel_hooks.providers.otlp import OTLPProvider
         except ImportError:
+            logger.warning(
+                "opentelemetry packages not installed; install with: "
+                "pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http"
+            )
             return None
         endpoint = pcfg.get("endpoint", "")
         if not endpoint:
+            logger.warning("otlp provider requires endpoint")
             return None
         headers_raw = pcfg.get("headers", "")
         headers: dict[str, str] = {}
@@ -60,6 +67,7 @@ def create_provider(name: str, config: dict[str, Any]):
         try:
             from otel_hooks.providers.datadog import DatadogProvider
         except ImportError:
+            logger.warning("ddtrace package not installed; install with: pip install ddtrace")
             return None
         service = pcfg.get("service", "otel-hooks")
         env = pcfg.get("env")
@@ -72,4 +80,5 @@ def create_provider(name: str, config: dict[str, Any]):
             logger.warning("Failed to create DatadogProvider", exc_info=True)
             return None
 
+    logger.warning("Unknown provider: %s", name)
     return None

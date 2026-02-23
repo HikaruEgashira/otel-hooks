@@ -10,7 +10,6 @@ import json
 import logging
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,30 +32,16 @@ from otel_hooks.runtime.state import (
 )
 
 
-def _log(log_file: Path, level: str, message: str) -> None:
-    try:
-        from otel_hooks.file_io import append_line
-
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        append_line(log_file, f"{ts} [{level}] {message}\n")
-    except Exception:
-        pass
-    if level in ("WARN", "ERROR"):
-        print(f"otel-hooks: {message}", file=sys.stderr)
-
-
 def _resolve_state_paths(config: dict[str, Any]) -> StatePaths:
     configured = config.get("state_dir")
     if configured:
-        try:
-            base = Path(str(configured)).expanduser().resolve()
-            return build_state_paths(base)
-        except Exception:
-            logger.debug("Invalid state_dir %r, using default", configured, exc_info=True)
+        base = Path(str(configured)).expanduser().resolve()
+        return build_state_paths(base)
     return build_state_paths(DEFAULT_STATE_DIR)
 
 
 def read_hook_payload() -> dict[str, Any]:
+    """Read JSON payload from stdin (provided by parent AI tool process)."""
     try:
         data = sys.stdin.read()
         payload: dict[str, Any] = {}
@@ -64,7 +49,7 @@ def read_hook_payload() -> dict[str, Any]:
             payload = json.loads(data)
         return payload
     except Exception:
-        logger.debug("Failed to read hook payload from stdin", exc_info=True)
+        logger.warning("Failed to read hook payload from stdin", exc_info=True)
         return {}
 
 
@@ -79,38 +64,35 @@ def run_hook(
     runtime_state_paths = _resolve_state_paths(config)
     log_file = runtime_state_paths.state_dir / "otel_hook.log"
 
-    def debug(msg: str) -> None:
-        if debug_enabled:
-            _log(log_file, "DEBUG", msg)
+    from otel_hooks.logging_setup import configure
 
-    def info(msg: str) -> None:
-        _log(log_file, "INFO", msg)
-
-    def warn(msg: str) -> None:
-        _log(log_file, "WARN", msg)
+    configure(log_file, debug=debug_enabled, reconfigure=True)
 
     provider_name = config.get("provider")
     if not provider_name:
-        debug("No --provider flag; exiting.")
+        logger.debug("No --provider flag; exiting.")
         return 0
 
-    event = parse_hook_event(payload, warn_fn=warn)
+    event = parse_hook_event(payload)
 
     if event is None:
-        debug("No matching adapter for payload; exiting.")
+        logger.debug("No matching adapter for payload; exiting.")
         return 0
 
     if event.kind is SupportKind.TRACE:
         if event.transcript_path is not None and not event.transcript_path.exists():
-            debug("Transcript file not found; exiting.")
+            logger.debug("Transcript file not found; exiting.")
             return 0
         if event.transcript_path is None:
-            debug(f"No transcript path for {event.source_tool}; session-only trace not yet supported.")
+            logger.debug(
+                "No transcript path for %s; session-only trace not yet supported.",
+                event.source_tool,
+            )
             return 0
 
     provider = provider_factory(provider_name, config)
     if not provider:
-        warn(f"Failed to create provider: {provider_name}")
+        logger.warning("Failed to create provider: %s", provider_name)
         return 1
 
     emitted = 0
@@ -125,18 +107,21 @@ def run_hook(
                     event.session_id,
                 )
                 emitted = 1
-            except Exception as e:
-                warn(f"emit_metric failed: {e}")
+            except Exception:
+                logger.warning("emit_metric failed", exc_info=True)
                 return 1
             try:
                 provider.flush()
-            except Exception as e:
-                warn(f"flush failed: {e}")
+            except Exception:
+                logger.warning("flush failed", exc_info=True)
                 return 1
             duration = time.time() - start
-            info(
-                f"Processed metric {event.metric_name} in {duration:.2f}s "
-                f"(session={event.session_id or '-'}, provider={provider_name})"
+            logger.info(
+                "Processed metric %s in %.2fs (session=%s, provider=%s)",
+                event.metric_name,
+                duration,
+                event.session_id or "-",
+                provider_name,
             )
             return 0
 
@@ -172,14 +157,13 @@ def run_hook(
                         event.transcript_path,
                         event.source_tool,
                     )
-                except Exception as e:
-                    warn(f"emit_turn failed: {e}")
+                except Exception:
+                    logger.warning("emit_turn failed", exc_info=True)
                     emit_failed = True
                     break
                 emitted += 1
 
             if emit_failed:
-                # Keep read position and counters unchanged so the same input can be retried.
                 ss.offset = prev_offset
                 ss.buffer = prev_buffer
                 ss.turn_count = prev_turn_count
@@ -190,30 +174,36 @@ def run_hook(
 
         try:
             provider.flush()
-        except Exception as e:
-            warn(f"flush failed: {e}")
+        except Exception:
+            logger.warning("flush failed", exc_info=True)
             return 1
 
         duration = time.time() - start
         if emit_failed:
-            warn(
-                f"Partial failure: {emitted} turns emitted in {duration:.2f}s "
-                f"(session={event.session_id}, provider={provider_name})"
+            logger.warning(
+                "Partial failure: %d turns emitted in %.2fs (session=%s, provider=%s)",
+                emitted,
+                duration,
+                event.session_id,
+                provider_name,
             )
             return 1
-        info(
-            f"Processed {emitted} turns in {duration:.2f}s "
-            f"(session={event.session_id}, provider={provider_name})"
+        logger.info(
+            "Processed %d turns in %.2fs (session=%s, provider=%s)",
+            emitted,
+            duration,
+            event.session_id,
+            provider_name,
         )
         return 0
-    except Exception as e:
-        warn(f"Unexpected failure: {e}")
+    except Exception:
+        logger.warning("Unexpected failure", exc_info=True)
         return 1
     finally:
         try:
             provider.shutdown()
         except Exception:
-            logger.debug("provider.shutdown() failed", exc_info=True)
+            logger.warning("provider.shutdown() failed", exc_info=True)
 
 
 def _parse_flag(name: str) -> str | None:
@@ -228,13 +218,12 @@ def _parse_flag(name: str) -> str | None:
 
 
 def main() -> int:
-    try:
-        from otel_hooks.config import load_config
+    from otel_hooks.logging_setup import configure
+    from otel_hooks.config import load_config
 
-        config = load_config()
-    except Exception:
-        logger.debug("Failed to load config, using defaults", exc_info=True)
-        config = {}
+    configure(build_state_paths(DEFAULT_STATE_DIR).state_dir / "otel_hook.log")
+
+    config = load_config()
 
     provider = _parse_flag("provider")
     if provider:
