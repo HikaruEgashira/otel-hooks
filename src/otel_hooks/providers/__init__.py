@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from otel_hooks.domain.transcript import Turn
+
+if TYPE_CHECKING:
+    from otel_hooks.attribution.record import FileRecord
 
 
 @runtime_checkable
@@ -25,6 +28,12 @@ class Provider(Protocol):
         attributes: dict[str, str] | None = None,
         source_tool: str = "",
         session_id: str = "",
+    ) -> None: ...
+    def emit_attribution(
+        self,
+        session_id: str,
+        file_records: list["FileRecord"],
+        source_tool: str = "",
     ) -> None: ...
     def flush(self) -> None: ...
     def shutdown(self) -> None: ...

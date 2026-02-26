@@ -154,6 +154,7 @@ def _write_provider_config_for_scope(
     provider: str,
     config_scope: Scope,
     skip_project_secrets: bool,
+    extra: dict | None = None,
 ) -> None:
     otel_cfg = cfg.load_raw_config(config_scope)
 
@@ -172,6 +173,13 @@ def _write_provider_config_for_scope(
             value = ask_fn(f"{env_var}:")
             if value:
                 section[field] = value
+
+    if extra:
+        for k, v in extra.items():
+            if isinstance(v, dict) and isinstance(otel_cfg.get(k), dict):
+                otel_cfg[k].update(v)
+            else:
+                otel_cfg[k] = v
 
     cfg.save_config(otel_cfg, config_scope)
 
@@ -316,6 +324,21 @@ def cmd_enable(args: argparse.Namespace) -> int:
         scope = _resolve_scope(resolved_args, tool_cfg)
         config_scopes.add(Scope.PROJECT if scope is Scope.PROJECT else Scope.GLOBAL)
 
+    # Attribution: resolve from flag or interactive prompt (before provider write)
+    attribution_flag = getattr(args, "attribution", None)
+    if attribution_flag is None and _is_tty():
+        attribution_flag = _confirm(
+            "Enable file attribution tracking? "
+            "(records AI-modified files/lines as OTel spans)",
+            default=True,
+        )
+    attribution_extra = (
+        {"attribution": {"enabled": bool(attribution_flag)}}
+        if attribution_flag is not None
+        else None
+    )
+
+    # Write provider + attribution config in a single save per scope
     for provider in providers:
         for config_scope in (Scope.GLOBAL, Scope.PROJECT):
             if config_scope not in config_scopes:
@@ -324,7 +347,11 @@ def cmd_enable(args: argparse.Namespace) -> int:
                 provider=provider,
                 config_scope=config_scope,
                 skip_project_secrets=True,
+                extra=attribution_extra,
             )
+
+    if attribution_flag:
+        console.print("[dim]Attribution: enabled → spans emitted as ai_session.file_attribution[/dim]")
 
     return _run_tool_actions(
         tools,
@@ -448,6 +475,10 @@ def cmd_status(args: argparse.Namespace) -> int:
                 val = pcfg.get(field, "")
                 masked = _mask(val) if "SECRET" in env_var and val else (val or "(not set)")
                 console.print(f"    {env_var}: {masked}")
+
+    attribution_enabled = bool(otel_config.get("attribution", {}).get("enabled", False))
+    attr_label = "[green]enabled[/green]" if attribution_enabled else "[dim]disabled[/dim]"
+    console.print(f"\nFile attribution (ai_session.file_attribution): {attr_label}")
 
     return 0
 
@@ -616,6 +647,15 @@ def main() -> None:
     _add_scope_flags(p_enable)
     _add_tool_flag(p_enable)
     p_enable.add_argument("--provider", choices=PROVIDERS, nargs="+", help="Provider(s) to use")
+    attr_group = p_enable.add_mutually_exclusive_group()
+    attr_group.add_argument(
+        "--attribution", dest="attribution", action="store_true", default=None,
+        help="Enable file attribution tracking (ai_session.file_attribution spans)",
+    )
+    attr_group.add_argument(
+        "--no-attribution", dest="attribution", action="store_false",
+        help="Disable file attribution tracking",
+    )
 
     p_disable = sub.add_parser("disable", help="Disable tracing hooks")
     _add_scope_flags(p_disable)
