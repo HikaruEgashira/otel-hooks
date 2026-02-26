@@ -7,7 +7,7 @@ Reference:
 from pathlib import Path
 from typing import Any, Dict
 
-from . import HookEvent, Scope, _extract_transcript_path, register_tool
+from . import HookEvent, Scope, _extract_cwd, _extract_transcript_path, register_tool
 from .json_io import load_json, save_json
 
 HOOK_COMMAND = "otel-hooks hook"
@@ -67,4 +67,5 @@ class CursorConfig:
             source_tool=self.name,
             session_id=session_id,
             transcript_path=_extract_transcript_path(payload),
+            cwd=_extract_cwd(payload),
         )

@@ -27,17 +27,26 @@ class HookEvent:
     kind: SupportKind
     session_id: str
     transcript_path: Path | None
+    cwd: Path | None = None
     metric_name: str = ""
     metric_value: float = 0.0
     metric_attributes: dict[str, str] | None = None
 
     @classmethod
-    def trace(cls, *, source_tool: str, session_id: str, transcript_path: Path | None) -> "HookEvent":
+    def trace(
+        cls,
+        *,
+        source_tool: str,
+        session_id: str,
+        transcript_path: Path | None,
+        cwd: Path | None = None,
+    ) -> "HookEvent":
         return cls(
             source_tool=source_tool,
             kind=SupportKind.TRACE,
             session_id=session_id,
             transcript_path=transcript_path,
+            cwd=cwd,
         )
 
     @classmethod
@@ -154,3 +163,11 @@ def _extract_transcript_path(payload: Dict[str, Any]) -> Path | None:
     if not transcript:
         return None
     return Path(transcript).expanduser().resolve()
+
+
+def _extract_cwd(payload: Dict[str, Any]) -> Path | None:
+    """Shared helper: extract working directory from common payload keys."""
+    cwd = payload.get("cwd") or payload.get("workingDirectory")
+    if not isinstance(cwd, str) or not cwd:
+        return None
+    return Path(cwd).expanduser().resolve()

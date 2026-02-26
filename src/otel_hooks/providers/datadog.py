@@ -99,6 +99,52 @@ class DatadogProvider:
                     tags[f"metric.attr.{k}"] = v
             metric_span.set_tags(tags)
 
+    def emit_attribution(
+        self,
+        session_id: str,
+        file_records: list,
+        source_tool: str = "",
+    ) -> None:
+        with tracer.trace(
+            "ai_session.attribution",
+            resource=f"{source_tool} - Attribution" if source_tool else "Attribution",
+            service="otel-hooks",
+            span_type="custom",
+        ) as root_span:
+            root_tags: dict[str, str] = {
+                "session.id": session_id,
+                "gen_ai.system": "otel-hooks",
+                "attribution.file_count": str(len(file_records)),
+            }
+            if source_tool:
+                root_tags["source_tool"] = source_tool
+            root_span.set_tags(root_tags)
+
+            for f in file_records:
+                conv = f.conversations[0] if f.conversations else None
+                with tracer.trace(
+                    "ai_session.file_attribution",
+                    resource=f.path,
+                    service="otel-hooks",
+                    span_type="custom",
+                ) as file_span:
+                    tags: dict[str, str] = {
+                        "session.id": session_id,
+                        "file.path": f.path,
+                        "attribution.contributor": conv.contributor.type if conv else "unknown",
+                    }
+                    if source_tool:
+                        tags["source_tool"] = source_tool
+                    if conv and conv.contributor.model:
+                        tags["ai.model"] = conv.contributor.model
+                    if conv and conv.ranges:
+                        tags["file.lines.start"] = str(conv.ranges[0].start_line)
+                        tags["file.lines.end"] = str(conv.ranges[-1].end_line)
+                        tags["file.lines.count"] = str(
+                            sum(r.end_line - r.start_line + 1 for r in conv.ranges)
+                        )
+                    file_span.set_tags(tags)
+
     def flush(self) -> None:
         tracer.flush()
 

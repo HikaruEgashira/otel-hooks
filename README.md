@@ -64,9 +64,29 @@ Project config overrides global. Environment variables override both.
     "public_key": "pk-...",
     "secret_key": "sk-...",
     "base_url": "https://cloud.langfuse.com"
+  },
+  "attribution": {
+    "enabled": true
   }
 }
 ```
+
+### File attribution
+
+When `attribution.enabled` is `true`, otel-hooks emits an additional `ai_session.file_attribution` span for each file modified by the AI tool (Write/Edit operations). Each span carries:
+
+| Attribute | Example |
+|-----------|---------|
+| `session.id` | `"abc-123"` |
+| `file.path` | `"src/main.py"` |
+| `file.lines.start` | `1` |
+| `file.lines.end` | `42` |
+| `file.lines.count` | `42` |
+| `ai.model` | `"anthropic/claude-sonnet-4-6"` |
+| `attribution.contributor` | `"ai"` |
+| `source_tool` | `"claude"` |
+
+This follows the [agent-trace v0.1.0](https://agent-trace.dev/) schema and stores attribution data in your OLAP backend alongside session traces — queryable without any additional tooling.
 
 `otel-hooks enable` writes this config interactively. Each tool's own settings file only contains the hook registration.
 

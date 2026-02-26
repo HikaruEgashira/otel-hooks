@@ -100,6 +100,44 @@ class LangfuseProvider:
             ):
                 pass
 
+    def emit_attribution(
+        self,
+        session_id: str,
+        file_records: list,
+        source_tool: str = "",
+    ) -> None:
+        span_name = f"{source_tool} - Attribution" if source_tool else "AI Session - Attribution"
+        tags = ["otel-hooks", "attribution"]
+        if source_tool:
+            tags.append(source_tool)
+
+        with propagate_attributes(session_id=session_id, trace_name=span_name, tags=tags):
+            with self._langfuse.start_as_current_span(
+                name=span_name,
+                metadata={
+                    "source": "otel-hooks",
+                    "session_id": session_id,
+                    "source_tool": source_tool,
+                    "file_count": len(file_records),
+                },
+            ):
+                for f in file_records:
+                    conv = f.conversations[0] if f.conversations else None
+                    with self._langfuse.start_as_current_observation(
+                        name=f"File: {f.path}",
+                        as_type="span",
+                        metadata={
+                            "file_path": f.path,
+                            "contributor": conv.contributor.type if conv else "unknown",
+                            "model": conv.contributor.model if conv else None,
+                            "ranges": (
+                                [{"start": r.start_line, "end": r.end_line} for r in conv.ranges]
+                                if conv else []
+                            ),
+                        },
+                    ):
+                        pass
+
     def flush(self) -> None:
         self._langfuse.flush()
 

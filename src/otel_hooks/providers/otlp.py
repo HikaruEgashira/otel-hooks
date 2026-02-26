@@ -92,6 +92,47 @@ class OTLPProvider:
         ):
             pass
 
+    def emit_attribution(
+        self,
+        session_id: str,
+        file_records: list,
+        source_tool: str = "",
+    ) -> None:
+        from otel_hooks.attribution.extractor import get_git_revision
+        from pathlib import Path
+
+        root_attrs: dict[str, str | int] = {
+            "session.id": session_id,
+            "gen_ai.system": "otel-hooks",
+            "attribution.file_count": len(file_records),
+        }
+        if source_tool:
+            root_attrs["source_tool"] = source_tool
+
+        span_name = f"{source_tool} - Attribution" if source_tool else "AI Session - Attribution"
+        with self._tracer.start_as_current_span(span_name, attributes=root_attrs):
+            for f in file_records:
+                conv = f.conversations[0] if f.conversations else None
+                file_attrs: dict[str, str | int] = {
+                    "session.id": session_id,
+                    "file.path": f.path,
+                    "attribution.contributor": conv.contributor.type if conv else "unknown",
+                }
+                if source_tool:
+                    file_attrs["source_tool"] = source_tool
+                if conv and conv.contributor.model:
+                    file_attrs["ai.model"] = conv.contributor.model
+                if conv and conv.ranges:
+                    file_attrs["file.lines.start"] = conv.ranges[0].start_line
+                    file_attrs["file.lines.end"] = conv.ranges[-1].end_line
+                    file_attrs["file.lines.count"] = sum(
+                        r.end_line - r.start_line + 1 for r in conv.ranges
+                    )
+                with self._tracer.start_as_current_span(
+                    "ai_session.file_attribution", attributes=file_attrs
+                ):
+                    pass
+
     def flush(self) -> None:
         self._provider.force_flush()
 

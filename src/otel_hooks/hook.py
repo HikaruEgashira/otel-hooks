@@ -32,6 +32,34 @@ from otel_hooks.runtime.state import (
 )
 
 
+def _run_attribution(turns: list, event: Any, config: dict[str, Any], provider: Any) -> None:
+    """Emit agent-trace file attribution via the provider pipeline."""
+    if not turns:
+        return
+    if not config.get("attribution", {}).get("enabled", False):
+        return
+    try:
+        from otel_hooks.attribution import build_file_records
+        from otel_hooks.attribution.extractor import detect_repo_root, extract_file_ops
+
+        ops = extract_file_ops(turns, event.source_tool)
+        if not ops:
+            return
+
+        repo_root = detect_repo_root([op.abs_path for op in ops], fallback=event.cwd)
+        if repo_root is None:
+            logger.debug("attribution: cannot detect repo root; skipping")
+            return
+
+        file_records = build_file_records(ops, repo_root.resolve())
+        if not file_records:
+            return
+
+        provider.emit_attribution(event.session_id, file_records, event.source_tool)
+    except Exception:
+        logger.debug("Attribution emit failed", exc_info=True)
+
+
 def _resolve_state_paths(config: dict[str, Any]) -> StatePaths:
     configured = config.get("state_dir")
     if configured:
@@ -96,6 +124,7 @@ def run_hook(
         return 1
 
     emitted = 0
+    attributed_turns: list = []
     try:
         if event.kind is SupportKind.METRICS:
             try:
@@ -161,6 +190,7 @@ def run_hook(
                     logger.warning("emit_turn failed", exc_info=True)
                     emit_failed = True
                     break
+                attributed_turns.append(turn)
                 emitted += 1
 
             if emit_failed:
@@ -177,6 +207,8 @@ def run_hook(
         except Exception:
             logger.warning("flush failed", exc_info=True)
             return 1
+
+        _run_attribution(attributed_turns, event, config, provider)
 
         duration = time.time() - start
         if emit_failed:
