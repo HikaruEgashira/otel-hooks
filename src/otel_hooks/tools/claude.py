@@ -7,7 +7,7 @@ Reference:
 from pathlib import Path
 from typing import Any, Dict
 
-from . import HookEvent, Scope, _extract_cwd, _extract_transcript_path, register_tool
+from . import Scope, register_tool
 from .json_io import load_json, save_json
 
 HOOK_COMMAND = "otel-hooks hook"
@@ -66,21 +66,3 @@ class ClaudeConfig:
             del settings["hooks"]["Stop"]
         return settings
 
-    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
-        session_id = (
-            payload.get("sessionId")
-            or payload.get("session_id")
-            or payload.get("session", {}).get("id")
-        )
-        if not isinstance(session_id, str) or not session_id:
-            return None
-        if not any(k in payload for k in ("sessionId", "session_id")) and not isinstance(
-            payload.get("session"), dict
-        ):
-            return None
-        return HookEvent.trace(
-            source_tool=self.name,
-            session_id=session_id,
-            transcript_path=_extract_transcript_path(payload),
-            cwd=_extract_cwd(payload),
-        )

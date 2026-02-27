@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-from . import HookEvent, Scope, _extract_transcript_path, register_tool
+from . import Scope, register_tool
 
 PLUGIN_FILE = "otel-hooks.js"
 PLUGIN_DIR_PROJECT = Path(".opencode") / "plugins"
@@ -232,37 +232,3 @@ class OpenCodeConfig:
         settings["_delete"] = True
         return settings
 
-    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
-        if payload.get("source_tool") != "opencode":
-            return None
-        if payload.get("kind") == "metric":
-            metric_name = payload.get("metric_name")
-            if not isinstance(metric_name, str) or not metric_name:
-                return None
-            raw_attrs = payload.get("metric_attributes")
-            attrs: dict[str, str] = {}
-            if isinstance(raw_attrs, dict):
-                attrs = {str(k): str(v) for k, v in raw_attrs.items() if v is not None}
-            session_id = payload.get("session_id")
-            sid = session_id if isinstance(session_id, str) else ""
-            value = payload.get("metric_value")
-            metric_value = float(value) if isinstance(value, (int, float)) else 1.0
-            return HookEvent.metric(
-                source_tool=self.name,
-                session_id=sid,
-                metric_name=metric_name,
-                metric_value=metric_value,
-                metric_attributes=attrs,
-            )
-
-        session_id = payload.get("session_id")
-        if not isinstance(session_id, str) or not session_id:
-            return None
-        transcript_path = _extract_transcript_path(payload)
-        if transcript_path is None:
-            return None
-        return HookEvent.trace(
-            source_tool=self.name,
-            session_id=session_id,
-            transcript_path=transcript_path,
-        )

@@ -64,11 +64,8 @@ def create_provider(name: str, config: dict[str, Any]):
             return None
 
     if name == "datadog":
-        try:
-            from otel_hooks.providers.datadog import DatadogProvider
-        except ImportError:
-            logger.warning("ddtrace package not installed; install with: pip install ddtrace")
-            return None
+        from otel_hooks.providers.datadog import DatadogProvider
+
         service = pcfg.get("service", "otel-hooks")
         env = pcfg.get("env")
         try:

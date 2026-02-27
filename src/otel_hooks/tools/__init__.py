@@ -4,70 +4,17 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Protocol, runtime_checkable
+
+from openhook import OpenHookEvent, ValidationError, from_legacy, is_openhook
 
 
 class Scope(str, Enum):
     GLOBAL = "global"
     PROJECT = "project"
     LOCAL = "local"
-
-
-class SupportKind(str, Enum):
-    TRACE = "trace"
-    METRICS = "metrics"
-
-
-@dataclass(frozen=True)
-class HookEvent:
-    source_tool: str
-    kind: SupportKind
-    session_id: str
-    transcript_path: Path | None
-    cwd: Path | None = None
-    metric_name: str = ""
-    metric_value: float = 0.0
-    metric_attributes: dict[str, str] | None = None
-
-    @classmethod
-    def trace(
-        cls,
-        *,
-        source_tool: str,
-        session_id: str,
-        transcript_path: Path | None,
-        cwd: Path | None = None,
-    ) -> "HookEvent":
-        return cls(
-            source_tool=source_tool,
-            kind=SupportKind.TRACE,
-            session_id=session_id,
-            transcript_path=transcript_path,
-            cwd=cwd,
-        )
-
-    @classmethod
-    def metric(
-        cls,
-        *,
-        source_tool: str,
-        metric_name: str,
-        metric_value: float = 1.0,
-        metric_attributes: dict[str, str] | None = None,
-        session_id: str = "",
-    ) -> "HookEvent":
-        return cls(
-            source_tool=source_tool,
-            kind=SupportKind.METRICS,
-            session_id=session_id,
-            transcript_path=None,
-            metric_name=metric_name,
-            metric_value=metric_value,
-            metric_attributes=metric_attributes,
-        )
 
 
 @runtime_checkable
@@ -84,7 +31,6 @@ class ToolConfig(Protocol):
     def unregister_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]: ...
     def scopes(self) -> list[Scope]: ...
     def is_hook_registered(self, settings: Dict[str, Any]) -> bool: ...
-    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None: ...
 
 
 TOOL_REGISTRY: Dict[str, type[ToolConfig]] = {}
@@ -122,52 +68,17 @@ def _ensure_registered() -> None:
         importlib.import_module(f"{package_name}.{module.name}")
 
 
-# Tools with more specific payload matching should be tried first.
-# Claude matches broadly on session_id, so more specific tools go first.
-_PARSE_ORDER: tuple[str, ...] = ("opencode", "cursor", "gemini", "kiro", "copilot", "cline", "codex", "claude")
-
-
-def parse_hook_event(
-    payload: Dict[str, Any],
-) -> HookEvent | None:
-    """Parse tool payload into a normalized HookEvent via registered adapters."""
-    _ensure_registered()
-    source_tool = payload.get("source_tool")
-    if isinstance(source_tool, str) and source_tool in TOOL_REGISTRY:
-        hinted = TOOL_REGISTRY[source_tool]().parse_event(payload)
-        if hinted is not None:
-            return hinted
-
-    seen: set[str] = set()
-    for name in _PARSE_ORDER:
-        if name in TOOL_REGISTRY:
-            seen.add(name)
-            event = TOOL_REGISTRY[name]().parse_event(payload)
-            if event is not None:
-                return event
-    for name, cls in TOOL_REGISTRY.items():
-        if name not in seen:
-            event = cls().parse_event(payload)
-            if event is not None:
-                return event
-    return None
-
-
-def _extract_transcript_path(payload: Dict[str, Any]) -> Path | None:
-    """Shared helper: extract transcript path from common payload keys."""
-    transcript = (
-        payload.get("transcriptPath")
-        or payload.get("transcript_path")
-        or payload.get("transcript", {}).get("path")
-    )
-    if not transcript:
+def parse_hook_event(payload: Dict[str, Any]) -> OpenHookEvent | None:
+    """Parse tool payload into a normalized OpenHookEvent via the openhook SDK."""
+    if not payload:
         return None
-    return Path(transcript).expanduser().resolve()
-
-
-def _extract_cwd(payload: Dict[str, Any]) -> Path | None:
-    """Shared helper: extract working directory from common payload keys."""
-    cwd = payload.get("cwd") or payload.get("workingDirectory")
-    if not isinstance(cwd, str) or not cwd:
+    if is_openhook(payload):
+        try:
+            return OpenHookEvent.from_dict(payload)
+        except (ValidationError, ValueError):
+            return None
+    event = from_legacy(payload)
+    # Reject payloads with no useful identification (unknown tool and no session)
+    if event.source == "unknown" and not event.session_id:
         return None
-    return Path(cwd).expanduser().resolve()
+    return event

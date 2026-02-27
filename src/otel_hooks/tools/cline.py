@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-from . import HookEvent, Scope, register_tool
+from . import Scope, register_tool
 
 HOOK_COMMAND = "otel-hooks hook"
 HOOK_SCRIPT = "TaskComplete"
@@ -80,8 +80,3 @@ class ClineConfig:
             settings["_script"] = remaining + "\n"
         return settings
 
-    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
-        task_id = payload.get("taskId")
-        if not isinstance(task_id, str) or not task_id:
-            return None
-        return HookEvent.trace(source_tool=self.name, session_id=task_id, transcript_path=None)

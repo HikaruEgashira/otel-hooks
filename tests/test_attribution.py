@@ -226,9 +226,9 @@ class RunAttributionTest(unittest.TestCase):
 
             provider = MagicMock()
             event = MagicMock()
-            event.source_tool = "claude"
+            event.source = "claude"
             event.session_id = "session-xyz"
-            event.cwd = repo_root
+            event.context = f"file://{repo_root}"
 
             turn = _make_turn([
                 {"name": "Write", "input": {"file_path": str(target), "content": "line1\nline2\n"}}
@@ -249,9 +249,9 @@ class RunAttributionTest(unittest.TestCase):
 
         provider = MagicMock()
         event = MagicMock()
-        event.source_tool = "claude"
+        event.source = "claude"
         event.session_id = "s1"
-        event.cwd = None
+        event.context = None
 
         turn = _make_turn([
             {"name": "Write", "input": {"file_path": "/repo/x.py", "content": "hello"}}
@@ -264,9 +264,9 @@ class RunAttributionTest(unittest.TestCase):
 
         provider = MagicMock()
         event = MagicMock()
-        event.source_tool = "claude"
+        event.source = "claude"
         event.session_id = "s1"
-        event.cwd = None
+        event.context = None
 
         # Turn with no Write/Edit tools
         turn = _make_turn([{"name": "Bash", "input": {"command": "ls"}}])
@@ -277,6 +277,7 @@ class RunAttributionTest(unittest.TestCase):
 class HookEventCwdTest(unittest.TestCase):
     def test_cwd_extracted_from_claude_payload(self) -> None:
         from otel_hooks.tools import parse_hook_event
+        from otel_hooks.hook import _context_to_cwd
 
         payload = {
             "sessionId": "s1",
@@ -285,17 +286,20 @@ class HookEventCwdTest(unittest.TestCase):
         }
         event = parse_hook_event(payload)
         self.assertIsNotNone(event)
-        self.assertIsNotNone(event.cwd)
-        # resolve() normalises symlinks (e.g. macOS /private/tmp), so compare resolved paths
-        self.assertEqual(event.cwd, Path("/home/user/project").resolve())
+        self.assertIsNotNone(event.context)
+        # cwd is stored as file:// URI in event.context
+        cwd = _context_to_cwd(event.context)
+        self.assertIsNotNone(cwd)
+        self.assertEqual(cwd, Path("/home/user/project"))
 
     def test_cwd_none_when_absent(self) -> None:
         from otel_hooks.tools import parse_hook_event
+        from otel_hooks.hook import _context_to_cwd
 
         payload = {"sessionId": "s1", "transcriptPath": "/tmp/t.jsonl"}
         event = parse_hook_event(payload)
         self.assertIsNotNone(event)
-        self.assertIsNone(event.cwd)
+        self.assertIsNone(_context_to_cwd(event.context))
 
 
 if __name__ == "__main__":

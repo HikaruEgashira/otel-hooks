@@ -7,15 +7,12 @@ Reference:
 from pathlib import Path
 from typing import Any, Dict
 
-from . import HookEvent, Scope, register_tool
+from . import Scope, register_tool
 from .json_io import load_json, save_json
 
 AGENT_FILE = "default.json"
 _HOOK_EVENTS = ("userPromptSubmit", "preToolUse", "postToolUse", "stop")
 
-
-def _to_str_map(raw: dict[str, Any]) -> dict[str, str]:
-    return {k: str(v) for k, v in raw.items() if v is not None and str(v)}
 
 
 @register_tool
@@ -69,63 +66,3 @@ class KiroConfig:
                 del hooks[event_name]
         return settings
 
-    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
-        event = payload.get("hook_event_name")
-        if not isinstance(event, str) or event not in _HOOK_EVENTS:
-            return None
-
-        session_id = payload.get("session_id")
-        sid = session_id if isinstance(session_id, str) else ""
-
-        if event == "userPromptSubmit":
-            prompt = payload.get("prompt")
-            return HookEvent.metric(
-                source_tool=self.name,
-                session_id=sid,
-                metric_name="prompt_submitted",
-                metric_attributes=_to_str_map(
-                    {
-                        "cwd": payload.get("cwd"),
-                        "prompt_len": len(prompt) if isinstance(prompt, str) else "",
-                    }
-                ),
-            )
-
-        if event == "preToolUse":
-            tool_name = payload.get("tool_name") or payload.get("toolName")
-            return HookEvent.metric(
-                source_tool=self.name,
-                session_id=sid,
-                metric_name="tool_started",
-                metric_attributes=_to_str_map(
-                    {
-                        "tool_name": tool_name,
-                        "cwd": payload.get("cwd"),
-                    }
-                ),
-            )
-
-        if event == "postToolUse":
-            tool_name = payload.get("tool_name") or payload.get("toolName")
-            return HookEvent.metric(
-                source_tool=self.name,
-                session_id=sid,
-                metric_name="tool_completed",
-                metric_attributes=_to_str_map(
-                    {
-                        "tool_name": tool_name,
-                        "cwd": payload.get("cwd"),
-                    }
-                ),
-            )
-
-        return HookEvent.metric(
-            source_tool=self.name,
-            session_id=sid,
-            metric_name="session_ended",
-            metric_attributes=_to_str_map(
-                {
-                    "cwd": payload.get("cwd"),
-                }
-            ),
-        )

@@ -6,6 +6,7 @@ import types
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from otel_hooks.domain.transcript import Turn
 
@@ -199,63 +200,6 @@ def _build_fake_otlp_modules() -> dict[str, types.ModuleType]:
     }
 
 
-def _build_fake_ddtrace_module() -> types.ModuleType:
-    mod = types.ModuleType("ddtrace")
-
-    class _Config:
-        def __init__(self) -> None:
-            self.service: str | None = None
-
-    mod.config = _Config()
-
-    class _Span:
-        def __init__(self, sink: list["_Span"], meta: dict[str, object]) -> None:
-            self.meta = meta
-            self.tags: dict[str, str] = {}
-            sink.append(self)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def set_tags(self, tags: dict[str, str]) -> None:
-            self.tags.update(tags)
-
-    class _Tracer:
-        def __init__(self) -> None:
-            self.configure_calls: list[dict[str, object]] = []
-            self.set_tags_calls: list[dict[str, str]] = []
-            self.spans: list[_Span] = []
-            self.flush_called = False
-            self.shutdown_called = False
-
-        def configure(self, **kwargs: object) -> None:
-            self.configure_calls.append(dict(kwargs))
-
-        def set_tags(self, tags: dict[str, str]) -> None:
-            self.set_tags_calls.append(dict(tags))
-
-        def trace(self, name: str, resource: str, service: str, span_type: str) -> _Span:
-            return _Span(
-                self.spans,
-                {
-                    "name": name,
-                    "resource": resource,
-                    "service": service,
-                    "span_type": span_type,
-                },
-            )
-
-        def flush(self) -> None:
-            self.flush_called = True
-
-        def shutdown(self) -> None:
-            self.shutdown_called = True
-
-    mod.tracer = _Tracer()
-    return mod
 
 
 class ProviderContractTest(unittest.TestCase):
@@ -306,25 +250,29 @@ class ProviderContractTest(unittest.TestCase):
         self.assertTrue(fake_provider.shutdown_called)
 
     def test_datadog_provider_emits_expected_span_shape(self) -> None:
-        fake_ddtrace = _build_fake_ddtrace_module()
-        with _patch_modules({"ddtrace": fake_ddtrace}):
-            mod = _import_fresh("otel_hooks.providers.datadog")
-            provider = mod.DatadogProvider(service="svc", env="prod")
-            provider.emit_turn("s1", 1, _sample_turn(), Path("/tmp/t.jsonl"), "claude")
-            provider.emit_metric("tool_started", 1.0, {"tool_name": "read"}, "claude", "s1")
+        from otel_hooks.providers.datadog import DatadogProvider
+
+        provider = DatadogProvider(service="svc", env="prod")
+        provider.emit_turn("s1", 1, _sample_turn(), Path("/tmp/t.jsonl"), "claude")
+        provider.emit_metric("tool_started", 1.0, {"tool_name": "read"}, "claude", "s1")
+
+        tracer = provider._tracer
+        spans = tracer._buffer
+        self.assertEqual(tracer.service, "svc")
+        self.assertEqual(tracer._global_tags, {"env": "prod"})
+        self.assertEqual(spans[0].name, "ai_session.turn")
+        self.assertEqual(spans[0].meta["source_tool"], "claude")
+        self.assertEqual(spans[2].name, "ai_session.tool")
+        self.assertEqual(spans[3].name, "ai_session.metric")
+        self.assertEqual(spans[3].meta["metric.attr.tool_name"], "read")
+
+        with patch("otel_hooks.providers._dd_transport.http.client.HTTPConnection"):
             provider.flush()
+        self.assertEqual(len(tracer._buffer), 0)
+
+        with patch("otel_hooks.providers._dd_transport.http.client.HTTPConnection"):
             provider.shutdown()
 
-        tracer = fake_ddtrace.tracer
-        self.assertEqual(fake_ddtrace.config.service, "svc")
-        self.assertEqual(tracer.set_tags_calls, [{"env": "prod"}])
-        self.assertEqual(tracer.spans[0].meta["name"], "ai_session.turn")
-        self.assertEqual(tracer.spans[0].tags["source_tool"], "claude")
-        self.assertEqual(tracer.spans[2].meta["name"], "ai_session.tool")
-        self.assertEqual(tracer.spans[3].meta["name"], "ai_session.metric")
-        self.assertEqual(tracer.spans[3].tags["metric.attr.tool_name"], "read")
-        self.assertTrue(tracer.flush_called)
-        self.assertTrue(tracer.shutdown_called)
 
 
 if __name__ == "__main__":

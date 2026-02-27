@@ -4,4 +4,5 @@ dist/
 *.egg-info/
 .coverage
 .env
+.venv/
 .otel-hooks.json

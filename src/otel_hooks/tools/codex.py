@@ -15,7 +15,7 @@ import base64
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from . import HookEvent, Scope, register_tool
+from . import Scope, register_tool
 
 CONFIG_PATH = Path.home() / ".codex" / "config.toml"
 
@@ -129,9 +129,3 @@ class CodexConfig:
         }
         return settings
 
-    def parse_event(self, payload: Dict[str, Any]) -> HookEvent | None:
-        # Codex natively exports OTel events (input/output/tool traces) via its own exporter.
-        thread_id = payload.get("thread-id")
-        if not isinstance(thread_id, str) or not thread_id:
-            return None
-        return HookEvent.trace(source_tool=self.name, session_id=thread_id, transcript_path=None)

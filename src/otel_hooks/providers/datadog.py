@@ -1,21 +1,18 @@
-"""Datadog provider using ddtrace SDK."""
+"""Datadog provider — lightweight Agent trace transport (no ddtrace dependency)."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from ddtrace import config as dd_config, tracer
-
 from otel_hooks.domain.transcript import MAX_CHARS_DEFAULT, Turn
+from otel_hooks.providers._dd_transport import Tracer
 from otel_hooks.providers.common import build_turn_payload
 
 
 class DatadogProvider:
     def __init__(self, service: str = "otel-hooks", env: str | None = None, *, max_chars: int = MAX_CHARS_DEFAULT) -> None:
-        dd_config.service = service
-        if env:
-            tracer.set_tags({"env": env})
+        self._tracer = Tracer(service=service, env=env)
         self._max_chars = max_chars
 
     def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path | None, source_tool: str = "") -> None:
@@ -31,7 +28,7 @@ class DatadogProvider:
             tags["transcript_path"] = str(transcript_path)
         if source_tool:
             tags["source_tool"] = source_tool
-        with tracer.trace(
+        with self._tracer.trace(
             "ai_session.turn",
             resource=f"{source_tool} - Turn {turn_num}" if source_tool else f"Turn {turn_num}",
             service="otel-hooks",
@@ -39,7 +36,7 @@ class DatadogProvider:
         ) as root_span:
             root_span.set_tags(tags)
 
-            with tracer.trace(
+            with self._tracer.trace(
                 "ai_session.generation",
                 resource="Assistant Response",
                 service="otel-hooks",
@@ -56,7 +53,7 @@ class DatadogProvider:
 
             for tc in payload.tool_calls:
                 in_str = tc.input if isinstance(tc.input, str) else json.dumps(tc.input, ensure_ascii=False)
-                with tracer.trace(
+                with self._tracer.trace(
                     "ai_session.tool",
                     resource=tc.name,
                     service="otel-hooks",
@@ -79,7 +76,7 @@ class DatadogProvider:
         source_tool: str = "",
         session_id: str = "",
     ) -> None:
-        with tracer.trace(
+        with self._tracer.trace(
             "ai_session.metric",
             resource=metric_name,
             service="otel-hooks",
@@ -105,7 +102,7 @@ class DatadogProvider:
         file_records: list,
         source_tool: str = "",
     ) -> None:
-        with tracer.trace(
+        with self._tracer.trace(
             "ai_session.attribution",
             resource=f"{source_tool} - Attribution" if source_tool else "Attribution",
             service="otel-hooks",
@@ -122,7 +119,7 @@ class DatadogProvider:
 
             for f in file_records:
                 conv = f.conversations[0] if f.conversations else None
-                with tracer.trace(
+                with self._tracer.trace(
                     "ai_session.file_attribution",
                     resource=f.path,
                     service="otel-hooks",
@@ -146,7 +143,7 @@ class DatadogProvider:
                     file_span.set_tags(tags)
 
     def flush(self) -> None:
-        tracer.flush()
+        self._tracer.flush()
 
     def shutdown(self) -> None:
-        tracer.shutdown()
+        self._tracer.shutdown()
