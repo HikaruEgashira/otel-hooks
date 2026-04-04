@@ -3,7 +3,7 @@ from __future__ import annotations
 import tests._path_setup  # noqa: F401
 import unittest
 
-from openhook import EventType
+from otel_hooks.hook_event import EventType
 from otel_hooks.tools import parse_hook_event
 
 

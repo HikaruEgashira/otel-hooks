@@ -1,0 +1,142 @@
+"""Lightweight hook event model — replaces the openhook dependency."""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import StrEnum
+from pathlib import Path
+from typing import Any
+
+
+class EventType(StrEnum):
+    SESSION_START = "session.start"
+    SESSION_END = "session.end"
+    PROMPT_SUBMIT = "prompt.submit"
+    TOOL_START = "tool.start"
+    TOOL_END = "tool.end"
+    FILE_WRITE = "file.write"
+
+
+@dataclass(frozen=True)
+class HookEvent:
+    source: str
+    type: EventType
+    session_id: str
+    data: dict[str, Any] = field(default_factory=dict)
+    context: str | None = None
+    extensions: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def transcript_path(self) -> Path | None:
+        tp = self.data.get("transcript_path")
+        if not tp:
+            return None
+        return Path(tp)
+
+    @property
+    def is_trace(self) -> bool:
+        return self.transcript_path is not None
+
+
+# ---------------------------------------------------------------------------
+# Legacy payload detection (replaces openhook.compat.from_legacy)
+# ---------------------------------------------------------------------------
+
+_METRIC_EVENT_MAP: dict[str, EventType] = {
+    "userPromptSubmitted": EventType.PROMPT_SUBMIT,
+    "userPromptSubmit": EventType.PROMPT_SUBMIT,
+    "preToolUse": EventType.TOOL_START,
+    "PreToolUse": EventType.TOOL_START,
+    "postToolUse": EventType.TOOL_END,
+    "PostToolUse": EventType.TOOL_END,
+    "sessionEnd": EventType.SESSION_END,
+    "SessionEnd": EventType.SESSION_END,
+    "stop": EventType.SESSION_END,
+    "Stop": EventType.SESSION_END,
+    # New events from upstream specs
+    "sessionStart": EventType.SESSION_START,
+    "SessionStart": EventType.SESSION_START,
+    "errorOccurred": EventType.SESSION_END,
+    "ErrorOccurred": EventType.SESSION_END,
+    "agentSpawn": EventType.SESSION_START,
+    "AgentSpawn": EventType.SESSION_START,
+}
+
+
+def _detect_source(payload: dict[str, Any]) -> str:
+    if "source_tool" in payload:
+        return str(payload["source_tool"])
+    if "conversation_id" in payload:
+        return "cursor"
+    if "taskId" in payload:
+        return "cline"
+    if "thread-id" in payload:
+        return "codex"
+    if "hook_event_name" in payload:
+        event_name = str(payload["hook_event_name"])
+        # Kiro uses camelCase userPromptSubmit; Copilot uses camelCase userPromptSubmitted
+        if event_name in ("userPromptSubmit", "stop", "agentSpawn"):
+            return "kiro"
+        return "copilot"
+    if "sessionId" in payload or "transcriptPath" in payload:
+        return "claude-code"
+    if "session_id" in payload and "timestamp" in payload:
+        return "gemini"
+    return "unknown"
+
+
+def _extract_session_id(payload: dict[str, Any]) -> str:
+    for key in ("conversation_id", "sessionId", "session_id", "taskId", "thread-id"):
+        val = payload.get(key)
+        if val:
+            return str(val)
+    nested = payload.get("session")
+    if isinstance(nested, dict) and "id" in nested:
+        return str(nested["id"])
+    return ""
+
+
+def _extract_transcript_path(payload: dict[str, Any]) -> str | None:
+    for key in ("transcriptPath", "transcript_path"):
+        val = payload.get(key)
+        if val:
+            return str(val)
+    nested = payload.get("transcript")
+    if isinstance(nested, dict) and "path" in nested:
+        return str(nested["path"])
+    return None
+
+
+def from_legacy(payload: dict[str, Any]) -> HookEvent:
+    """Convert a legacy tool payload into a HookEvent."""
+    source = _detect_source(payload)
+    session_id = _extract_session_id(payload)
+
+    event_name = str(payload.get("hook_event_name", ""))
+    event_type = _METRIC_EVENT_MAP.get(event_name, EventType.SESSION_END)
+
+    data: dict[str, Any] = {}
+    tp = _extract_transcript_path(payload)
+    if tp:
+        data["transcript_path"] = tp
+
+    if event_type in (EventType.TOOL_START, EventType.TOOL_END):
+        tool_name = payload.get("tool_name")
+        if tool_name:
+            data["tool_name"] = str(tool_name)
+
+    context: str | None = None
+    cwd = payload.get("cwd")
+    if cwd:
+        context = f"file://{cwd}"
+
+    return HookEvent(
+        source=source,
+        type=event_type,
+        session_id=session_id,
+        data=data,
+        context=context,
+        extensions={"legacy_payload": payload},
+    )

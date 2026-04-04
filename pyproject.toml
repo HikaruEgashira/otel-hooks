@@ -6,7 +6,6 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "langfuse",
-    "openhook",
     "opentelemetry-exporter-otlp-proto-http",
     "opentelemetry-sdk",
     "questionary>=2.1.1",

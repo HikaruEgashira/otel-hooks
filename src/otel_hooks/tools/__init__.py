@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Protocol, runtime_checkable
 
-from openhook import OpenHookEvent, ValidationError, from_legacy, is_openhook
+from otel_hooks.hook_event import HookEvent, from_legacy
 
 
 class Scope(str, Enum):
@@ -68,15 +68,10 @@ def _ensure_registered() -> None:
         importlib.import_module(f"{package_name}.{module.name}")
 
 
-def parse_hook_event(payload: Dict[str, Any]) -> OpenHookEvent | None:
-    """Parse tool payload into a normalized OpenHookEvent via the openhook SDK."""
+def parse_hook_event(payload: Dict[str, Any]) -> HookEvent | None:
+    """Parse tool payload into a normalized HookEvent."""
     if not payload:
         return None
-    if is_openhook(payload):
-        try:
-            return OpenHookEvent.from_dict(payload)
-        except (ValidationError, ValueError):
-            return None
     event = from_legacy(payload)
     # Reject payloads with no useful identification (unknown tool and no session)
     if event.source == "unknown" and not event.session_id:

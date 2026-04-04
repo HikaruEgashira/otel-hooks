@@ -335,15 +335,6 @@ wheels = [
 ]
 
 [[package]]
-name = "openhook"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/95/b5/c5c0bc2c88d5145ba37d1aaf8ace74fe6323d5b2fa0fe556af183d1798ec/openhook-0.1.0.tar.gz", hash = "sha256:40bc145ac6043cf1a19f2bb2d7ce59d6af1d472f2657a20fc1dbc3016d493e57", size = 9051 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/57/3ca6380c075bdfea38f3e32b635f7fd34319ac8158a898530bfc2819089a/openhook-0.1.0-py3-none-any.whl", hash = "sha256:490916767ace9a65f10db3c4b7b17fb64de340e1e951082a620d953e8d7bcb18", size = 6592 },
-]
-
-[[package]]
 name = "opentelemetry-api"
 version = "1.39.1"
 source = { registry = "https://pypi.org/simple" }
@@ -431,7 +422,6 @@ version = "0.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "langfuse" },
-    { name = "openhook" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
     { name = "questionary" },
@@ -447,7 +437,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "langfuse" },
-    { name = "openhook" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
     { name = "questionary", specifier = ">=2.1.1" },

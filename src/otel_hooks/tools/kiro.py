@@ -11,7 +11,7 @@ from . import Scope, register_tool
 from .json_io import load_json, save_json
 
 AGENT_FILE = "default.json"
-_HOOK_EVENTS = ("userPromptSubmit", "preToolUse", "postToolUse", "stop")
+_HOOK_EVENTS = ("agentSpawn", "userPromptSubmit", "preToolUse", "postToolUse", "stop")
 
 
 

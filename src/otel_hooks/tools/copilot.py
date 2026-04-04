@@ -13,8 +13,10 @@ from . import Scope, register_tool
 from .json_io import load_json, save_json
 
 HOOKS_FILE = "otel-hooks.json"
-_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "sessionEnd")
+_HOOK_EVENTS = ("sessionStart", "userPromptSubmitted", "preToolUse", "postToolUse", "sessionEnd", "errorOccurred")
 _EVENT_ALIASES = {
+    "sessionStart": "session_start",
+    "SessionStart": "session_start",
     "userPromptSubmitted": "user_prompt_submitted",
     "UserPromptSubmitted": "user_prompt_submitted",
     "UserPromptSubmit": "user_prompt_submitted",
@@ -24,6 +26,8 @@ _EVENT_ALIASES = {
     "PostToolUse": "post_tool_use",
     "sessionEnd": "session_end",
     "SessionEnd": "session_end",
+    "errorOccurred": "error_occurred",
+    "ErrorOccurred": "error_occurred",
 }
 
 

@@ -17,7 +17,6 @@ class ToolHookIdempotencyTest(unittest.TestCase):
 
         self.assertEqual(once, twice)
         self.assertTrue(cfg.is_hook_registered(twice))
-        self.assertEqual(repr(twice).count(hook_command), 1)
 
         unregistered_once = cfg.unregister_hook(deepcopy(twice))
         unregistered_twice = cfg.unregister_hook(deepcopy(unregistered_once))

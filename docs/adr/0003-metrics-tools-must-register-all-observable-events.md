@@ -9,8 +9,8 @@ Copilot/Kiro は payload adapter 側で複数イベントを `metrics` 化でき
 ## 決定
 `metrics` サポートのツールは、観測可能な全イベントへ `otel-hooks hook` を登録する。
 
-- Copilot: `userPromptSubmitted`, `preToolUse`, `postToolUse`, `sessionEnd`
-- Kiro: `userPromptSubmit`, `preToolUse`, `postToolUse`, `stop`
+- Copilot: `sessionStart`, `userPromptSubmitted`, `preToolUse`, `postToolUse`, `sessionEnd`, `errorOccurred`
+- Kiro: `agentSpawn`, `userPromptSubmit`, `preToolUse`, `postToolUse`, `stop`
 
 `is_hook_registered` は「全イベントに登録済み」を充足条件とする。
 

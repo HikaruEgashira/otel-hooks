@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-from openhook import EventType, OpenHookEvent
+from otel_hooks.hook_event import EventType, HookEvent
 from otel_hooks.tools import parse_hook_event
 from otel_hooks.domain.transcript import build_turns, decode_jsonl_lines
 from otel_hooks.providers.factory import create_provider
@@ -37,6 +37,7 @@ from otel_hooks.runtime.state import (
 _METRIC_EVENT_TYPES = frozenset({EventType.PROMPT_SUBMIT, EventType.TOOL_START, EventType.TOOL_END})
 
 _EVENT_TYPE_TO_METRIC_NAME: dict[EventType, str] = {
+    EventType.SESSION_START: "session_started",
     EventType.PROMPT_SUBMIT: "prompt_submitted",
     EventType.TOOL_START: "tool_started",
     EventType.TOOL_END: "tool_completed",
@@ -45,28 +46,28 @@ _EVENT_TYPE_TO_METRIC_NAME: dict[EventType, str] = {
 
 
 def _context_to_cwd(context: str | None) -> Path | None:
-    """Convert an openhook file:// context URI to a filesystem Path."""
+    """Convert a file:// context URI to a filesystem Path."""
     if not context or not context.startswith("file://"):
         return None
     path = urlparse(context).path
     return Path(path) if path else None
 
 
-def _derive_metric_name(event: OpenHookEvent) -> str:
+def _derive_metric_name(event: HookEvent) -> str:
     legacy = event.extensions.get("legacy_payload", {})
     if legacy.get("metric_name"):
         return str(legacy["metric_name"])
     return _EVENT_TYPE_TO_METRIC_NAME.get(event.type, str(event.type))
 
 
-def _derive_metric_value(event: OpenHookEvent) -> float:
+def _derive_metric_value(event: HookEvent) -> float:
     legacy = event.extensions.get("legacy_payload", {})
     if "metric_value" in legacy:
         return float(legacy["metric_value"])
     return 1.0
 
 
-def _derive_metric_attrs(event: OpenHookEvent) -> dict[str, str]:
+def _derive_metric_attrs(event: HookEvent) -> dict[str, str]:
     legacy = event.extensions.get("legacy_payload", {})
     # Explicit metric_attributes takes precedence (e.g., OpenCode plugin format)
     if isinstance(legacy.get("metric_attributes"), dict):
@@ -82,7 +83,7 @@ def _derive_metric_attrs(event: OpenHookEvent) -> dict[str, str]:
     return attrs
 
 
-def _is_metric_event(event: OpenHookEvent) -> bool:
+def _is_metric_event(event: HookEvent) -> bool:
     """True if the event should be routed to emit_metric."""
     if event.is_trace:
         return False
