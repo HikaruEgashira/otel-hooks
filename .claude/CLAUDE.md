@@ -1,6 +1,6 @@
 # otel-hooks
 
-CLI/hook tool that records AI coding tool operations as OpenTelemetry traces. v0.7.2
+CLI/hook tool that records AI coding tool operations as OpenTelemetry traces. v0.13.1
 
 ## Architecture
 
