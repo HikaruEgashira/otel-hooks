@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-04-04
+> Snapshot: 2026-04-06
 
 ## Config Location
 
@@ -70,11 +70,11 @@
 | FileChanged | No | filename (basename) |
 | WorktreeCreate | Yes (exit 2) | — |
 | WorktreeRemove | No | — |
-| PreCompact | No | trigger: `manual\|auto` |
-| PostCompact | No | trigger: `manual\|auto` |
+| PreCompact | No | compaction_trigger: `manual\|auto` |
+| PostCompact | No | compaction_trigger: `manual\|auto` |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
-| SessionEnd | No | end_reason: `clear\|resume\|logout\|prompt_input_exit\|other` |
+| SessionEnd | No | end_reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
 
 ## Common Input Fields (all events)
 
@@ -96,6 +96,7 @@
 
 - `source`: `startup|resume|clear|compact`
 - `model`: string
+- `agent_type`: string (optional)
 
 ### InstructionsLoaded
 
@@ -155,16 +156,18 @@
 
 ### WorktreeCreate
 
-- `worktree_name`: string
-- `source_path`: string (optional)
+- `worktree_path`: string
+- `isolation_mode`: string (optional)
 
 ### WorktreeRemove
 
 - `worktree_path`: string
+- `reason`: `session_exit|subagent_finish` (optional)
 
 ### PreCompact / PostCompact
 
-- `trigger`: `manual|auto`
+- `compaction_trigger`: `manual|auto`
+- `summary`: string (optional)
 
 ### Elicitation / ElicitationResult
 
@@ -183,9 +186,13 @@
 - `teammate_name`: string
 - `team_name`: string (optional)
 
+### Stop
+
+- `stop_reason`: `end_turn|max_tokens|tool_use|stop_sequence`
+
 ### SessionEnd
 
-- `end_reason`: `clear|resume|logout|prompt_input_exit|other`
+- `end_reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
 
 ## Common Output Fields
 
