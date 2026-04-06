@@ -70,8 +70,8 @@
 | FileChanged | No | filename (basename) |
 | WorktreeCreate | Yes (exit 2) | — |
 | WorktreeRemove | No | — |
-| PreCompact | No | trigger: `manual\|auto` |
-| PostCompact | No | trigger: `manual\|auto` |
+| PreCompact | No | compaction_trigger: `manual\|auto` |
+| PostCompact | No | compaction_trigger: `manual\|auto` |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
 | SessionEnd | No | end_reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
