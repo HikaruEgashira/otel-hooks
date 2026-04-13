@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-04-06
+> Snapshot: 2026-04-13
 
 ## Config Location
 
@@ -65,16 +65,16 @@
 | Stop | Yes (exit 2) | — |
 | StopFailure | No | error_type |
 | TeammateIdle | Yes (exit 2) | — |
-| ConfigChange | Yes (exit 2) | config_source |
+| ConfigChange | Yes (exit 2) | source |
 | CwdChanged | No | — |
 | FileChanged | No | filename (basename) |
 | WorktreeCreate | Yes (exit 2) | — |
 | WorktreeRemove | No | — |
-| PreCompact | No | compaction_trigger: `manual\|auto` |
-| PostCompact | No | compaction_trigger: `manual\|auto` |
+| PreCompact | No | compaction_type: `manual\|auto` |
+| PostCompact | No | compaction_type: `manual\|auto` |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
-| SessionEnd | No | end_reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
+| SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
 
 ## Common Input Fields (all events)
 
@@ -136,13 +136,21 @@
 - `agent_transcript_path`: string (SubagentStop)
 - `last_assistant_message`: string (SubagentStop)
 
-### TaskCreated / TaskCompleted
+### TaskCreated
 
 - `task_id`: string
 - `task_subject`: string
 - `task_description`: string (optional)
 - `teammate_name`: string (optional)
 - `team_name`: string (optional)
+
+### TaskCompleted
+
+- `task_id`: string
+
+### CwdChanged
+
+- `previous_cwd`: string
 
 ### FileChanged
 
@@ -151,8 +159,7 @@
 
 ### ConfigChange
 
-- `config_source`: `user_settings|project_settings|local_settings|policy_settings|skills`
-- `changes`: object (optional)
+- `source`: `user_settings|project_settings|local_settings|policy_settings|skills`
 
 ### WorktreeCreate
 
@@ -166,20 +173,21 @@
 
 ### PreCompact / PostCompact
 
-- `compaction_trigger`: `manual|auto`
-- `summary`: string (optional)
+- `compaction_type`: `manual|auto`
 
-### Elicitation / ElicitationResult
+### Elicitation
 
 - `mcp_server`: string
-- `tool_name`: string
-- `form_fields`: array (Elicitation)
-- `user_response`: object (ElicitationResult)
+- `form.fields`: array of `{ name, label, type, required }`
+
+### ElicitationResult
+
+- `mcp_server`: string
+- `form_response`: object
 
 ### StopFailure
 
 - `error_type`: `rate_limit|authentication_failed|billing_error|invalid_request|server_error|max_output_tokens|unknown`
-- `error_message`: string
 
 ### TeammateIdle
 
@@ -188,11 +196,11 @@
 
 ### Stop
 
-- `stop_reason`: `end_turn|max_tokens|tool_use|stop_sequence`
+(no extra fields)
 
 ### SessionEnd
 
-- `end_reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
+- `reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
 
 ## Common Output Fields
 
@@ -221,7 +229,14 @@
 }
 ```
 
-### UserPromptSubmit / PostToolUse / Stop / TaskCreated / TaskCompleted
+### UserPromptSubmit
+
+- `decision`: `"block"` (optional)
+- `reason`: string
+- `additionalContext`: string (optional)
+- `sessionTitle`: string (optional)
+
+### PostToolUse / Stop / TaskCreated / TaskCompleted
 
 - `decision`: `"block"` (optional)
 - `reason`: string
