@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-04-13
+> Snapshot: 2026-04-20
 
 ## Config Location
 
@@ -10,6 +10,8 @@
 | Global | `~/.claude/settings.json` |
 | Project | `.claude/settings.json` |
 | Local | `.claude/settings.local.json` |
+| Plugin | `<plugin_dir>/hooks/hooks.json` (when plugin enabled) |
+| Skill/Agent | Frontmatter in skill/agent definition (component lifetime) |
 
 ## Config Schema
 
@@ -40,10 +42,14 @@
 
 ### Hook Types
 
-- `command` — shell command (`command`, `async`, `shell`)
+- `command` — shell command (`command`, `async`, `asyncRewake`, `shell`)
 - `http` — POST request (`url`, `headers`, `allowedEnvVars`)
 - `prompt` — LLM prompt (`prompt`, `model`)
 - `agent` — agent invocation (`prompt`, `model`)
+
+### command hook: asyncRewake
+
+`asyncRewake: true` — when combined with `async: true`, wakes Claude if the background command exits with code 2.
 
 ## Hook Events (26 total)
 
@@ -155,39 +161,41 @@
 ### FileChanged
 
 - `file_path`: string
-- `change_type`: `modified|created|deleted`
+- `file_name`: string (basename, used as matcher target)
 
 ### ConfigChange
 
-- `source`: `user_settings|project_settings|local_settings|policy_settings|skills`
+- `config_source`: `user_settings|project_settings|local_settings|policy_settings|skills`
 
 ### WorktreeCreate
 
-- `worktree_path`: string
-- `isolation_mode`: string (optional)
+(no extra input fields — hook outputs the worktree path via stdout on exit 0; any non-zero exit fails creation)
 
 ### WorktreeRemove
 
-- `worktree_path`: string
-- `reason`: `session_exit|subagent_finish` (optional)
+(no extra input fields)
 
 ### PreCompact / PostCompact
 
-- `compaction_type`: `manual|auto`
+- `compact_reason`: `manual|auto`
 
 ### Elicitation
 
-- `mcp_server`: string
-- `form.fields`: array of `{ name, label, type, required }`
+- `mcp_server_name`: string
+- `tool_name`: string
+- `form_fields`: array of `{ name, label, type, required }`
 
 ### ElicitationResult
 
-- `mcp_server`: string
-- `form_response`: object
+- `mcp_server_name`: string
+- `tool_name`: string
+- `action`: `accept|decline|cancel`
+- `content`: object (filled values when action=accept)
 
 ### StopFailure
 
 - `error_type`: `rate_limit|authentication_failed|billing_error|invalid_request|server_error|max_output_tokens|unknown`
+- `error_message`: string
 
 ### TeammateIdle
 
@@ -200,7 +208,7 @@
 
 ### SessionEnd
 
-- `reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
+- `end_reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
 
 ## Common Output Fields
 

@@ -1,16 +1,19 @@
 # Kiro Hooks Specification
 
-> Source: https://kiro.dev/docs/cli/hooks/
-> Snapshot: 2026-04-04
+> Source: https://kiro.dev/docs/hooks/
+> Snapshot: 2026-04-20
 
 ## Config Location
 
-| Scope | Path |
-|-------|------|
-| Global | `~/.kiro/agents/default.json` |
-| Project | `.kiro/agents/default.json` |
+Hooks are configured via the **Kiro IDE panel** (UI-based, not JSON files).
+Access: "Agent Hooks" section in the Kiro panel, or Command Palette → `Kiro: Open Kiro Hook UI`.
 
-## Hook Events (5 total)
+> Note: The `~/.kiro/agents/default.json` / `.kiro/agents/default.json` paths from earlier
+> versions may still exist but the primary interface is now the UI form.
+
+## Hook Events (8+ total)
+
+### Agent Events (confirmed)
 
 | Event | Description |
 |-------|-------------|
@@ -19,6 +22,14 @@
 | preToolUse | Before tool execution (can block) |
 | postToolUse | After tool execution with results |
 | stop | Assistant finishes responding |
+
+### New Event Categories (UI labels; exact event names TBD)
+
+| Category | UI Label | Description |
+|----------|----------|-------------|
+| File | File Save / File Create / File Delete | File operations trigger |
+| Task | Pre Task Execution / Post Task Execution | Before/after spec task runs |
+| Manual | Manual Trigger | On-demand execution |
 
 ## Common Input Fields (all events)
 
@@ -56,7 +67,7 @@ Additional fields:
 | `@builtin` | Built-in tools only |
 | (no matcher) | All tools |
 
-## Configuration Options
+## Configuration Options (JSON / legacy)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -65,6 +76,19 @@ Additional fields:
 | `cache_ttl_seconds` | number | 0 | Cache successful results (0 = no cache) |
 
 Note: `agentSpawn` hooks are never cached.
+
+## Configuration Options (UI form)
+
+| Field | Description |
+|-------|-------------|
+| `title` | Short identifier for the hook |
+| `description` | Explanation of hook functionality |
+| `event` | Trigger (File Save, Pre Tool Use, Pre Task Execution, Manual, …) |
+| `tool_name` | Tool filter (for Pre/Post Tool Use hooks) |
+| `file_pattern` | Glob pattern (for file event hooks) |
+| `action` | `Ask Kiro` (agent prompt) or `Run Command` (shell) |
+| `instructions` | Prompt text (for Ask Kiro action) |
+| `command` | Shell command (for Run Command action) |
 
 ## Exit Codes
 
