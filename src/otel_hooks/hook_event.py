@@ -47,10 +47,13 @@ class HookEvent:
 _METRIC_EVENT_MAP: dict[str, EventType] = {
     "userPromptSubmitted": EventType.PROMPT_SUBMIT,
     "userPromptSubmit": EventType.PROMPT_SUBMIT,
+    "UserPromptSubmit": EventType.PROMPT_SUBMIT,
+    "UserPromptExpansion": EventType.PROMPT_SUBMIT,
     "preToolUse": EventType.TOOL_START,
     "PreToolUse": EventType.TOOL_START,
     "postToolUse": EventType.TOOL_END,
     "PostToolUse": EventType.TOOL_END,
+    "PostToolBatch": EventType.TOOL_END,
     "sessionEnd": EventType.SESSION_END,
     "SessionEnd": EventType.SESSION_END,
     "stop": EventType.SESSION_END,

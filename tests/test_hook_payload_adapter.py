@@ -163,6 +163,34 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.session_id, "g2")
         self.assertEqual(event.transcript_path.name, "gemini.jsonl")
 
+    def test_parse_hook_event_for_claude_user_prompt_expansion(self) -> None:
+        """UserPromptExpansion maps to PROMPT_SUBMIT (new Claude Code event)."""
+        payload = {
+            "source_tool": "claude",
+            "hook_event_name": "UserPromptExpansion",
+            "session_id": "s1",
+            "expansion_type": "slash_command",
+            "command_name": "review",
+            "command_args": "",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "claude")
+        self.assertEqual(event.type, EventType.PROMPT_SUBMIT)
+
+    def test_parse_hook_event_for_claude_post_tool_batch(self) -> None:
+        """PostToolBatch maps to TOOL_END (new Claude Code event)."""
+        payload = {
+            "source_tool": "claude",
+            "hook_event_name": "PostToolBatch",
+            "session_id": "s1",
+            "tool_calls": [{"tool_name": "Read", "tool_input": {}, "tool_response": {}}],
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "claude")
+        self.assertEqual(event.type, EventType.TOOL_END)
+
 
 if __name__ == "__main__":
     unittest.main()
