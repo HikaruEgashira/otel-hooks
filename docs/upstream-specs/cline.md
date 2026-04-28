@@ -1,7 +1,7 @@
 # Cline Hooks Specification
 
 > Source: https://docs.cline.bot/customization/hooks
-> Snapshot: 2026-04-04
+> Snapshot: 2026-04-27
 
 ## Config Location
 
@@ -54,17 +54,25 @@ Hooks are **executable scripts** (not JSON config):
 ### TaskStart / TaskResume / TaskCancel / TaskComplete
 
 ```json
-{ "taskStart": { "task": "string" } }
+{
+  "taskStart": {
+    "taskMetadata": {
+      "taskId": "string",
+      "ulid": "string",
+      "initialTask": "string"
+    }
+  }
+}
 ```
 
-(Field key matches event name in camelCase)
+(Field key matches event name in camelCase; `taskMetadata` is nested inside)
 
 ### PreToolUse
 
 ```json
 {
   "preToolUse": {
-    "tool": "string",
+    "toolName": "string",
     "parameters": "object"
   }
 }
@@ -75,11 +83,11 @@ Hooks are **executable scripts** (not JSON config):
 ```json
 {
   "postToolUse": {
-    "tool": "string",
+    "toolName": "string",
     "parameters": "object",
     "result": "string",
     "success": "boolean",
-    "durationMs": "number"
+    "executionTimeMs": "number"
   }
 }
 ```
@@ -89,7 +97,8 @@ Hooks are **executable scripts** (not JSON config):
 ```json
 {
   "userPromptSubmit": {
-    "prompt": "string"
+    "prompt": "string",
+    "attachments": ["string"]
   }
 }
 ```
@@ -99,8 +108,14 @@ Hooks are **executable scripts** (not JSON config):
 ```json
 {
   "preCompact": {
-    "conversationLength": "number",
-    "estimatedTokens": "number"
+    "taskId": "string",
+    "ulid": "string",
+    "contextSize": "number",
+    "compactionStrategy": "string",
+    "tokensIn": "number",
+    "tokensOut": "number",
+    "tokensInCache": "number",
+    "tokensOutCache": "number"
   }
 }
 ```

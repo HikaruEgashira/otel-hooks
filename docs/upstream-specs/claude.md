@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-04-13
+> Snapshot: 2026-04-27
 
 ## Config Location
 
@@ -24,6 +24,7 @@
             "type": "command",
             "command": "string",
             "async": false,
+            "asyncRewake": false,
             "shell": "bash",
             "timeout": 600,
             "statusMessage": "string",
@@ -40,23 +41,26 @@
 
 ### Hook Types
 
-- `command` — shell command (`command`, `async`, `shell`)
+- `command` — shell command (`command`, `async`, `asyncRewake`, `shell`)
 - `http` — POST request (`url`, `headers`, `allowedEnvVars`)
+- `mcp_tool` — MCP tool call (`server`, `tool`, `input` with `${path}` substitution)
 - `prompt` — LLM prompt (`prompt`, `model`)
-- `agent` — agent invocation (`prompt`, `model`)
+- `agent` — agent invocation (`prompt`, `model`) [experimental]
 
-## Hook Events (26 total)
+## Hook Events (28 total)
 
 | Event | Blockable | Matcher Target |
 |-------|-----------|----------------|
 | SessionStart | No | source: `startup\|resume\|clear\|compact` |
 | InstructionsLoaded | No | load_reason: `session_start\|nested_traversal\|path_glob_match\|include\|compact` |
 | UserPromptSubmit | Yes (exit 2) | — |
+| UserPromptExpansion | Yes (exit 2) | command_name |
 | PreToolUse | Yes (exit 2) | tool_name |
 | PermissionRequest | Yes (exit 2) | tool_name |
 | PermissionDenied | No | tool_name |
 | PostToolUse | No | tool_name |
 | PostToolUseFailure | No | tool_name |
+| PostToolBatch | Yes (exit 2) | — |
 | Notification | No | notification_type |
 | SubagentStart | No | agent_type |
 | SubagentStop | Yes (exit 2) | agent_type |
@@ -111,46 +115,56 @@
 
 - `prompt`: string
 
+### UserPromptExpansion
+
+- `expansion_type`: `slash_command|mcp_prompt`
+- `command_name`: string
+- `command_args`: string
+- `command_source`: `plugin|builtin|custom`
+- `prompt`: string (original unexpanded prompt)
+
 ### PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / PermissionDenied
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
 - `tool_response`: object (PostToolUse only)
+- `duration_ms`: number (PostToolUse, PostToolUseFailure only)
 - `error`: string (PostToolUseFailure only)
 - `is_interrupt`: boolean (PostToolUseFailure only)
-- `reason`: string (PermissionDenied only)
+- `denial_reason`: string (PermissionDenied only)
 - `permission_suggestions`: array (PermissionRequest only)
+
+### PostToolBatch
+
+- `tool_calls`: array of `{ tool_name, tool_input, tool_response }`
 
 ### Notification
 
 - `message`: string
 - `title`: string (optional)
 - `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog`
+- `notification_data`: object (optional)
 
 ### SubagentStart / SubagentStop
 
 - `agent_id`: string
 - `agent_type`: string
-- `stop_hook_active`: boolean (SubagentStop)
-- `agent_transcript_path`: string (SubagentStop)
-- `last_assistant_message`: string (SubagentStop)
 
 ### TaskCreated
 
 - `task_id`: string
-- `task_subject`: string
-- `task_description`: string (optional)
-- `teammate_name`: string (optional)
-- `team_name`: string (optional)
+- `task_description`: string
 
 ### TaskCompleted
 
 - `task_id`: string
+- `task_description`: string
 
 ### CwdChanged
 
 - `previous_cwd`: string
+- `new_cwd`: string
 
 ### FileChanged
 
@@ -159,40 +173,45 @@
 
 ### ConfigChange
 
-- `source`: `user_settings|project_settings|local_settings|policy_settings|skills`
+- `config_source`: `user_settings|project_settings|local_settings|policy_settings|skills`
+- `changed_keys`: string[]
 
 ### WorktreeCreate
 
 - `worktree_path`: string
-- `isolation_mode`: string (optional)
 
 ### WorktreeRemove
 
 - `worktree_path`: string
-- `reason`: `session_exit|subagent_finish` (optional)
 
 ### PreCompact / PostCompact
 
-- `compaction_type`: `manual|auto`
+- `trigger`: `manual|auto`
+- `estimated_removed_turns`: number (PreCompact only)
+- `removed_turns`: number (PostCompact only)
 
 ### Elicitation
 
-- `mcp_server`: string
-- `form.fields`: array of `{ name, label, type, required }`
+- `server_name`: string
+- `tool_name`: string
+- `fields`: array of `{ name, label, type, required, options? }`
 
 ### ElicitationResult
 
-- `mcp_server`: string
-- `form_response`: object
+- `server_name`: string
+- `tool_name`: string
+- `user_action`: `accepted|declined|cancelled`
+- `user_content`: object
 
 ### StopFailure
 
 - `error_type`: `rate_limit|authentication_failed|billing_error|invalid_request|server_error|max_output_tokens|unknown`
+- `error_message`: string
 
 ### TeammateIdle
 
-- `teammate_name`: string
-- `team_name`: string (optional)
+- `agent_type`: string
+- `agent_id`: string
 
 ### Stop
 
@@ -200,7 +219,7 @@
 
 ### SessionEnd
 
-- `reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
+- `end_reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
 
 ## Common Output Fields
 
@@ -229,14 +248,14 @@
 }
 ```
 
-### UserPromptSubmit
+### UserPromptSubmit / UserPromptExpansion
 
 - `decision`: `"block"` (optional)
 - `reason`: string
 - `additionalContext`: string (optional)
-- `sessionTitle`: string (optional)
+- `sessionTitle`: string (UserPromptSubmit only, optional)
 
-### PostToolUse / Stop / TaskCreated / TaskCompleted
+### PostToolUse / PostToolBatch / Stop / TaskCreated / TaskCompleted
 
 - `decision`: `"block"` (optional)
 - `reason`: string

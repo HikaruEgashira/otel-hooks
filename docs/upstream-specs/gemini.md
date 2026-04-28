@@ -1,7 +1,7 @@
 # Gemini CLI Hooks Specification
 
 > Source: https://geminicli.com/docs/hooks/
-> Snapshot: 2026-04-04
+> Snapshot: 2026-04-27
 
 ## Config Location
 
@@ -74,6 +74,7 @@ Precedence: Project > Global > System > Extensions
 ## Environment Variables
 
 - `GEMINI_PROJECT_DIR` — project root
+- `GEMINI_PLANS_DIR` — plans directory path
 - `GEMINI_SESSION_ID` — session identifier
 - `GEMINI_CWD` — current working directory
 - `CLAUDE_PROJECT_DIR` — alias for compatibility
