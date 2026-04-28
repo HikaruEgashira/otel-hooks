@@ -8,7 +8,19 @@ from typing import Any
 from langfuse import Langfuse, propagate_attributes
 
 from otel_hooks.domain.transcript import MAX_CHARS_DEFAULT, Turn
-from otel_hooks.providers.common import build_turn_payload
+from otel_hooks.providers.common import AssistantMessageInfo, build_turn_payload
+
+
+_LF_USAGE_KEY_MAP = {
+    "input_tokens": "input",
+    "output_tokens": "output",
+    "cache_read_input_tokens": "cache_read_input_tokens",
+    "cache_creation_input_tokens": "cache_creation_input_tokens",
+}
+
+
+def _to_langfuse_usage(usage: dict[str, int]) -> dict[str, int]:
+    return {_LF_USAGE_KEY_MAP[k]: v for k, v in usage.items() if k in _LF_USAGE_KEY_MAP}
 
 
 class LangfuseProvider:
@@ -28,6 +40,14 @@ class LangfuseProvider:
             metadata["transcript_path"] = str(transcript_path)
         if source_tool:
             metadata["source_tool"] = source_tool
+        if payload.turn_duration_s is not None:
+            metadata["turn_duration_seconds"] = payload.turn_duration_s
+        if payload.cwd:
+            metadata["cwd"] = payload.cwd
+        if payload.git_branch:
+            metadata["git_branch"] = payload.git_branch
+        if payload.usage:
+            metadata["usage"] = payload.usage
         span_name = f"{source_tool} - Turn {turn_num}" if source_tool else f"AI Session - Turn {turn_num}"
         tags = ["otel-hooks"]
         if source_tool:
@@ -42,18 +62,31 @@ class LangfuseProvider:
                 input={"role": "user", "content": payload.user_text},
                 metadata=metadata,
             ) as trace_span:
-                with self._langfuse.start_as_current_observation(
-                    name="Assistant Response",
-                    as_type="generation",
-                    model=payload.model,
-                    input={"role": "user", "content": payload.user_text},
-                    output={"role": "assistant", "content": payload.assistant_text},
-                    metadata={
-                        "assistant_text": payload.assistant_text_meta,
-                        "tool_count": len(payload.tool_calls),
-                    },
-                ):
-                    pass
+                assistants = payload.assistants or [
+                    AssistantMessageInfo(
+                        model=payload.model,
+                        text=payload.assistant_text,
+                        text_meta=payload.assistant_text_meta,
+                        usage={},
+                    )
+                ]
+                for idx, am in enumerate(assistants):
+                    obs_kwargs: dict[str, Any] = {
+                        "name": "Assistant Response",
+                        "as_type": "generation",
+                        "model": am.model,
+                        "input": {"role": "user", "content": payload.user_text} if idx == 0 else None,
+                        "output": {"role": "assistant", "content": am.text},
+                        "metadata": {
+                            "assistant_text": am.text_meta,
+                            "message_index": idx,
+                            "tool_count": len(payload.tool_calls) if idx == 0 else 0,
+                        },
+                    }
+                    if am.usage:
+                        obs_kwargs["usage_details"] = _to_langfuse_usage(am.usage)
+                    with self._langfuse.start_as_current_observation(**obs_kwargs):
+                        pass
 
                 for tc in payload.tool_calls:
                     with self._langfuse.start_as_current_observation(

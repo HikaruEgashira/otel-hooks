@@ -3,10 +3,22 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from otel_hooks.domain.transcript import MAX_CHARS_DEFAULT, Turn, extract_text, get_content, get_model, iter_tool_uses, truncate_text
+from otel_hooks.domain.transcript import (
+    MAX_CHARS_DEFAULT,
+    Turn,
+    extract_text,
+    get_content,
+    get_cwd,
+    get_git_branch,
+    get_model,
+    get_timestamp,
+    get_usage,
+    iter_tool_uses,
+    truncate_text,
+)
 
 
 @dataclass
@@ -20,6 +32,16 @@ class ToolCall:
 
 
 @dataclass
+class AssistantMessageInfo:
+    """Per-assistant-message metrics for granular generation observations."""
+
+    model: str
+    text: str
+    text_meta: dict[str, Any]
+    usage: dict[str, int]
+
+
+@dataclass
 class TurnPayload:
     user_text: str
     user_text_meta: dict[str, Any]
@@ -27,6 +49,11 @@ class TurnPayload:
     assistant_text_meta: dict[str, Any]
     model: str
     tool_calls: list[ToolCall]
+    turn_duration_s: float | None = None
+    usage: dict[str, int] = field(default_factory=dict)
+    assistants: list[AssistantMessageInfo] = field(default_factory=list)
+    cwd: str | None = None
+    git_branch: str | None = None
 
 
 def _tool_calls_from_assistants(assistant_msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -44,6 +71,25 @@ def _tool_calls_from_assistants(assistant_msgs: list[dict[str, Any]]) -> list[di
                 }
             )
     return calls
+
+
+def _aggregate_usage(per_msg: list[dict[str, int]]) -> dict[str, int]:
+    """Sum output_tokens across assistant messages, take MAX of input/cache (monotonic per turn).
+
+    Within a turn, the assistant input grows as tool_results accumulate, so the *peak* input
+    represents that turn's true context-window load. Output tokens are produced incrementally,
+    so they are summed.
+    """
+    if not per_msg:
+        return {}
+    agg: dict[str, int] = {}
+    for u in per_msg:
+        for k, v in u.items():
+            if k == "output_tokens":
+                agg[k] = agg.get(k, 0) + v
+            else:
+                agg[k] = max(agg.get(k, 0), v)
+    return agg
 
 
 def build_turn_payload(turn: Turn, *, max_chars: int = MAX_CHARS_DEFAULT) -> TurnPayload:
@@ -82,6 +128,28 @@ def build_turn_payload(turn: Turn, *, max_chars: int = MAX_CHARS_DEFAULT) -> Tur
             )
         )
 
+    assistants: list[AssistantMessageInfo] = []
+    per_msg_usage: list[dict[str, int]] = []
+    for am in turn.assistant_msgs:
+        usage = get_usage(am)
+        per_msg_usage.append(usage)
+        text_raw = extract_text(get_content(am))
+        text, text_meta = truncate_text(text_raw, max_chars)
+        assistants.append(
+            AssistantMessageInfo(
+                model=get_model(am),
+                text=text,
+                text_meta=text_meta,
+                usage=usage,
+            )
+        )
+
+    user_ts = get_timestamp(turn.user_msg)
+    last_ts = get_timestamp(last_assistant)
+    duration: float | None = None
+    if user_ts and last_ts and last_ts >= user_ts:
+        duration = (last_ts - user_ts).total_seconds()
+
     return TurnPayload(
         user_text=user_text,
         user_text_meta=user_text_meta,
@@ -89,4 +157,9 @@ def build_turn_payload(turn: Turn, *, max_chars: int = MAX_CHARS_DEFAULT) -> Tur
         assistant_text_meta=assistant_text_meta,
         model=model,
         tool_calls=tool_calls,
+        turn_duration_s=duration,
+        usage=_aggregate_usage(per_msg_usage),
+        assistants=assistants,
+        cwd=get_cwd(turn.user_msg),
+        git_branch=get_git_branch(turn.user_msg),
     )
