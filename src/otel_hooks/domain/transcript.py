@@ -6,11 +6,19 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 MAX_CHARS_DEFAULT = 20000
+
+_USAGE_KEYS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_read_input_tokens",
+    "cache_creation_input_tokens",
+)
 
 
 @dataclass
@@ -110,6 +118,45 @@ def get_message_id(msg: dict[str, Any]) -> str | None:
         if isinstance(mid, str) and mid:
             return mid
     return None
+
+
+def get_timestamp(msg: dict[str, Any]) -> datetime | None:
+    raw = msg.get("timestamp") if isinstance(msg, dict) else None
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def get_usage(msg: dict[str, Any]) -> dict[str, int]:
+    m = msg.get("message") if isinstance(msg, dict) else None
+    if not isinstance(m, dict):
+        return {}
+    raw = m.get("usage")
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, int] = {}
+    for k in _USAGE_KEYS:
+        v = raw.get(k)
+        if isinstance(v, int):
+            out[k] = v
+    return out
+
+
+def get_cwd(msg: dict[str, Any]) -> str | None:
+    if not isinstance(msg, dict):
+        return None
+    v = msg.get("cwd")
+    return v if isinstance(v, str) and v else None
+
+
+def get_git_branch(msg: dict[str, Any]) -> str | None:
+    if not isinstance(msg, dict):
+        return None
+    v = msg.get("gitBranch")
+    return v if isinstance(v, str) and v else None
 
 
 

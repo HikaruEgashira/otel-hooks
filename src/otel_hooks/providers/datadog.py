@@ -7,7 +7,7 @@ from pathlib import Path
 
 from otel_hooks.domain.transcript import MAX_CHARS_DEFAULT, Turn
 from otel_hooks.providers._dd_transport import Tracer
-from otel_hooks.providers.common import build_turn_payload
+from otel_hooks.providers.common import AssistantMessageInfo, build_turn_payload
 
 
 class DatadogProvider:
@@ -28,6 +28,14 @@ class DatadogProvider:
             tags["transcript_path"] = str(transcript_path)
         if source_tool:
             tags["source_tool"] = source_tool
+        if payload.turn_duration_s is not None:
+            tags["turn.duration_seconds"] = str(payload.turn_duration_s)
+        if payload.cwd:
+            tags["cwd"] = payload.cwd
+        if payload.git_branch:
+            tags["git.branch"] = payload.git_branch
+        for k, v in payload.usage.items():
+            tags[f"gen_ai.usage.{k}"] = str(v)
         with self._tracer.trace(
             "ai_session.turn",
             resource=f"{source_tool} - Turn {turn_num}" if source_tool else f"Turn {turn_num}",
@@ -36,20 +44,32 @@ class DatadogProvider:
         ) as root_span:
             root_span.set_tags(tags)
 
-            with self._tracer.trace(
-                "ai_session.generation",
-                resource="Assistant Response",
-                service="otel-hooks",
-                span_type="llm",
-            ) as gen_span:
-                gen_span.set_tags(
-                    {
-                        "gen_ai.request.model": payload.model,
-                        "gen_ai.prompt": payload.user_text,
-                        "gen_ai.completion": payload.assistant_text,
+            assistants = payload.assistants or [
+                AssistantMessageInfo(
+                    model=payload.model,
+                    text=payload.assistant_text,
+                    text_meta=payload.assistant_text_meta,
+                    usage={},
+                )
+            ]
+            for idx, am in enumerate(assistants):
+                with self._tracer.trace(
+                    "ai_session.generation",
+                    resource="Assistant Response",
+                    service="otel-hooks",
+                    span_type="llm",
+                ) as gen_span:
+                    gen_tags: dict[str, str] = {
+                        "gen_ai.request.model": am.model,
+                        "gen_ai.completion": am.text,
+                        "gen_ai.message.index": str(idx),
                         "gen_ai.usage.tool_count": str(len(payload.tool_calls)),
                     }
-                )
+                    if idx == 0:
+                        gen_tags["gen_ai.prompt"] = payload.user_text
+                    for k, v in am.usage.items():
+                        gen_tags[f"gen_ai.usage.{k}"] = str(v)
+                    gen_span.set_tags(gen_tags)
 
             for tc in payload.tool_calls:
                 in_str = tc.input if isinstance(tc.input, str) else json.dumps(tc.input, ensure_ascii=False)

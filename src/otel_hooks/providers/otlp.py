@@ -11,7 +11,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from otel_hooks.domain.transcript import MAX_CHARS_DEFAULT, Turn
-from otel_hooks.providers.common import build_turn_payload
+from otel_hooks.providers.common import AssistantMessageInfo, build_turn_payload
 
 
 class OTLPProvider:
@@ -26,7 +26,7 @@ class OTLPProvider:
 
     def emit_turn(self, session_id: str, turn_num: int, turn: Turn, transcript_path: Path | None, source_tool: str = "") -> None:
         payload = build_turn_payload(turn, max_chars=self._max_chars)
-        attrs: dict[str, str | int] = {
+        attrs: dict[str, str | int | float] = {
             "session.id": session_id,
             "gen_ai.system": "otel-hooks",
             "gen_ai.request.model": payload.model,
@@ -37,21 +37,43 @@ class OTLPProvider:
             attrs["transcript_path"] = str(transcript_path)
         if source_tool:
             attrs["source_tool"] = source_tool
+        if payload.turn_duration_s is not None:
+            attrs["turn.duration_seconds"] = payload.turn_duration_s
+        if payload.cwd:
+            attrs["cwd"] = payload.cwd
+        if payload.git_branch:
+            attrs["git.branch"] = payload.git_branch
+        for k, v in payload.usage.items():
+            attrs[f"gen_ai.usage.{k}"] = v
         span_name = f"{source_tool} - Turn {turn_num}" if source_tool else f"AI Session - Turn {turn_num}"
         with self._tracer.start_as_current_span(
             span_name,
             attributes=attrs,
         ):
-            with self._tracer.start_as_current_span(
-                "Assistant Response",
-                attributes={
-                    "gen_ai.request.model": payload.model,
-                    "gen_ai.prompt": payload.user_text,
-                    "gen_ai.completion": payload.assistant_text,
+            assistants = payload.assistants or [
+                AssistantMessageInfo(
+                    model=payload.model,
+                    text=payload.assistant_text,
+                    text_meta=payload.assistant_text_meta,
+                    usage={},
+                )
+            ]
+            for idx, am in enumerate(assistants):
+                gen_attrs: dict[str, str | int | float] = {
+                    "gen_ai.request.model": am.model,
+                    "gen_ai.completion": am.text,
+                    "gen_ai.message.index": idx,
                     "gen_ai.usage.tool_count": len(payload.tool_calls),
-                },
-            ):
-                pass
+                }
+                if idx == 0:
+                    gen_attrs["gen_ai.prompt"] = payload.user_text
+                for k, v in am.usage.items():
+                    gen_attrs[f"gen_ai.usage.{k}"] = v
+                with self._tracer.start_as_current_span(
+                    "Assistant Response",
+                    attributes=gen_attrs,
+                ):
+                    pass
 
             for tc in payload.tool_calls:
                 in_str = tc.input if isinstance(tc.input, str) else json.dumps(tc.input, ensure_ascii=False)

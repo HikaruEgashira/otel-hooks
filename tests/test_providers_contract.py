@@ -15,6 +15,9 @@ def _sample_turn() -> Turn:
     return Turn(
         user_msg={
             "type": "user",
+            "timestamp": "2026-04-28T10:00:00Z",
+            "cwd": "/repo/proj",
+            "gitBranch": "main",
             "message": {
                 "role": "user",
                 "content": [{"type": "text", "text": "hello"}],
@@ -23,6 +26,7 @@ def _sample_turn() -> Turn:
         assistant_msgs=[
             {
                 "type": "assistant",
+                "timestamp": "2026-04-28T10:00:03Z",
                 "message": {
                     "id": "a1",
                     "role": "assistant",
@@ -31,6 +35,12 @@ def _sample_turn() -> Turn:
                         {"type": "tool_use", "id": "t1", "name": "read", "input": {"path": "/tmp/a"}},
                         {"type": "text", "text": "done"},
                     ],
+                    "usage": {
+                        "input_tokens": 11,
+                        "output_tokens": 22,
+                        "cache_read_input_tokens": 33,
+                        "cache_creation_input_tokens": 44,
+                    },
                 },
             }
         ],
@@ -219,8 +229,17 @@ class ProviderContractTest(unittest.TestCase):
         self.assertEqual(client.host, "https://lf")
         self.assertEqual(len(client.spans), 2)
         self.assertEqual(len(client.observations), 2)
-        self.assertEqual(client.spans[0].payload["metadata"]["source_tool"], "claude")
-        self.assertEqual(client.spans[0].payload["metadata"]["transcript_path"], "/tmp/t.jsonl")
+        turn_meta = client.spans[0].payload["metadata"]
+        self.assertEqual(turn_meta["source_tool"], "claude")
+        self.assertEqual(turn_meta["transcript_path"], "/tmp/t.jsonl")
+        self.assertEqual(turn_meta["turn_duration_seconds"], 3.0)
+        self.assertEqual(turn_meta["cwd"], "/repo/proj")
+        self.assertEqual(turn_meta["git_branch"], "main")
+        self.assertEqual(turn_meta["usage"]["input_tokens"], 11)
+        gen_obs = client.observations[0]
+        self.assertEqual(gen_obs.payload["usage_details"]["input"], 11)
+        self.assertEqual(gen_obs.payload["usage_details"]["output"], 22)
+        self.assertEqual(gen_obs.payload["usage_details"]["cache_read_input_tokens"], 33)
         self.assertEqual(client.observations[1].updates[0]["output"], '{"ok": true}')
         self.assertTrue(client.flush_called)
         self.assertTrue(client.shutdown_called)
@@ -242,7 +261,16 @@ class ProviderContractTest(unittest.TestCase):
         self.assertEqual(fake_provider.processors[0].exporter.endpoint, "http://collector")
         self.assertEqual(fake_provider.processors[0].exporter.headers, {"x-auth": "abc"})
         self.assertEqual(spans[0].payload["name"], "claude - Turn 1")
-        self.assertEqual(spans[0].payload["attributes"]["source_tool"], "claude")
+        turn_attrs = spans[0].payload["attributes"]
+        self.assertEqual(turn_attrs["source_tool"], "claude")
+        self.assertEqual(turn_attrs["turn.duration_seconds"], 3.0)
+        self.assertEqual(turn_attrs["cwd"], "/repo/proj")
+        self.assertEqual(turn_attrs["git.branch"], "main")
+        self.assertEqual(turn_attrs["gen_ai.usage.input_tokens"], 11)
+        self.assertEqual(turn_attrs["gen_ai.usage.output_tokens"], 22)
+        gen_attrs = spans[1].payload["attributes"]
+        self.assertEqual(gen_attrs["gen_ai.usage.input_tokens"], 11)
+        self.assertEqual(gen_attrs["gen_ai.message.index"], 0)
         self.assertEqual(spans[2].payload["name"], "Tool: read")
         self.assertEqual(spans[3].payload["name"], "Metric - tool_started")
         self.assertEqual(spans[3].payload["attributes"]["metric.attr.tool_name"], "read")
@@ -262,6 +290,12 @@ class ProviderContractTest(unittest.TestCase):
         self.assertEqual(tracer._global_tags, {"env": "prod"})
         self.assertEqual(spans[0].name, "ai_session.turn")
         self.assertEqual(spans[0].meta["source_tool"], "claude")
+        self.assertEqual(spans[0].meta["turn.duration_seconds"], "3.0")
+        self.assertEqual(spans[0].meta["cwd"], "/repo/proj")
+        self.assertEqual(spans[0].meta["git.branch"], "main")
+        self.assertEqual(spans[0].meta["gen_ai.usage.input_tokens"], "11")
+        self.assertEqual(spans[1].meta["gen_ai.usage.input_tokens"], "11")
+        self.assertEqual(spans[1].meta["gen_ai.message.index"], "0")
         self.assertEqual(spans[2].name, "ai_session.tool")
         self.assertEqual(spans[3].name, "ai_session.metric")
         self.assertEqual(spans[3].meta["metric.attr.tool_name"], "read")

@@ -55,6 +55,87 @@ class ProviderCommonTest(unittest.TestCase):
         self.assertEqual(tool.input, "/tmp/a")
         self.assertEqual(tool.output, '{"ok": true}')
 
+    def test_build_turn_payload_extracts_duration_usage_and_project_context(self) -> None:
+        turn = Turn(
+            user_msg={
+                "type": "user",
+                "timestamp": "2026-04-28T10:00:00Z",
+                "cwd": "/repo/proj",
+                "gitBranch": "feat/x",
+                "message": {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+            },
+            assistant_msgs=[
+                {
+                    "type": "assistant",
+                    "timestamp": "2026-04-28T10:00:05Z",
+                    "message": {
+                        "id": "a1",
+                        "role": "assistant",
+                        "model": "claude-x",
+                        "content": [{"type": "tool_use", "id": "t1", "name": "read", "input": {}}],
+                        "usage": {
+                            "input_tokens": 100,
+                            "output_tokens": 20,
+                            "cache_read_input_tokens": 50,
+                            "cache_creation_input_tokens": 10,
+                        },
+                    },
+                },
+                {
+                    "type": "assistant",
+                    "timestamp": "2026-04-28T10:00:12Z",
+                    "message": {
+                        "id": "a2",
+                        "role": "assistant",
+                        "model": "claude-x",
+                        "content": [{"type": "text", "text": "done"}],
+                        "usage": {
+                            "input_tokens": 200,
+                            "output_tokens": 30,
+                            "cache_read_input_tokens": 80,
+                            "cache_creation_input_tokens": 5,
+                        },
+                    },
+                },
+            ],
+            tool_results_by_id={"t1": "ok"},
+        )
+
+        payload = build_turn_payload(turn)
+
+        self.assertEqual(payload.turn_duration_s, 12.0)
+        self.assertEqual(payload.cwd, "/repo/proj")
+        self.assertEqual(payload.git_branch, "feat/x")
+        # output sums; input/cache take the peak.
+        self.assertEqual(payload.usage["output_tokens"], 50)
+        self.assertEqual(payload.usage["input_tokens"], 200)
+        self.assertEqual(payload.usage["cache_read_input_tokens"], 80)
+        self.assertEqual(payload.usage["cache_creation_input_tokens"], 10)
+        self.assertEqual(len(payload.assistants), 2)
+        self.assertEqual(payload.assistants[0].usage["input_tokens"], 100)
+        self.assertEqual(payload.assistants[1].usage["input_tokens"], 200)
+
+    def test_build_turn_payload_handles_missing_timestamps_and_usage(self) -> None:
+        turn = Turn(
+            user_msg={"message": {"role": "user", "content": [{"type": "text", "text": "hi"}]}},
+            assistant_msgs=[
+                {
+                    "message": {
+                        "id": "a1",
+                        "role": "assistant",
+                        "model": "m",
+                        "content": [{"type": "text", "text": "x"}],
+                    }
+                }
+            ],
+            tool_results_by_id={},
+        )
+        payload = build_turn_payload(turn)
+        self.assertIsNone(payload.turn_duration_s)
+        self.assertEqual(payload.usage, {})
+        self.assertIsNone(payload.cwd)
+        self.assertIsNone(payload.git_branch)
+
     def test_build_turn_payload_truncates_string_fields(self) -> None:
         long = "x" * 25050
         turn = Turn(
