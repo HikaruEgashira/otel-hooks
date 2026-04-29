@@ -4,8 +4,17 @@ import tests._path_setup  # noqa: F401
 
 import unittest
 
-from otel_hooks.domain.transcript import Turn
+from otel_hooks.domain.transcript import ToolResultRecord, Turn
 from otel_hooks.providers.common import build_turn_payload
+
+
+def _result(content, ts: str | None = None) -> ToolResultRecord:
+    from datetime import datetime
+
+    parsed = None
+    if ts:
+        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    return ToolResultRecord(content=content, timestamp=parsed)
 
 
 class ProviderCommonTest(unittest.TestCase):
@@ -40,7 +49,7 @@ class ProviderCommonTest(unittest.TestCase):
                     },
                 },
             ],
-            tool_results_by_id={"t1": {"ok": True}},
+            tool_results_by_id={"t1": _result({"ok": True})},
         )
 
         payload = build_turn_payload(turn)
@@ -98,7 +107,7 @@ class ProviderCommonTest(unittest.TestCase):
                     },
                 },
             ],
-            tool_results_by_id={"t1": "ok"},
+            tool_results_by_id={"t1": _result("ok")},
         )
 
         payload = build_turn_payload(turn)
@@ -114,6 +123,62 @@ class ProviderCommonTest(unittest.TestCase):
         self.assertEqual(len(payload.assistants), 2)
         self.assertEqual(payload.assistants[0].usage["input_tokens"], 100)
         self.assertEqual(payload.assistants[1].usage["input_tokens"], 200)
+
+    def test_build_turn_payload_extracts_per_tool_duration_and_subagent_type(self) -> None:
+        turn = Turn(
+            user_msg={
+                "type": "user",
+                "timestamp": "2026-04-28T10:00:00Z",
+                "message": {"role": "user", "content": [{"type": "text", "text": "go"}]},
+            },
+            assistant_msgs=[
+                {
+                    "type": "assistant",
+                    "timestamp": "2026-04-28T10:00:00Z",
+                    "message": {
+                        "id": "a1",
+                        "role": "assistant",
+                        "model": "claude-x",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "task-1",
+                                "name": "Task",
+                                "input": {"description": "find bug", "subagent_type": "Explore"},
+                            },
+                            {
+                                "type": "tool_use",
+                                "id": "read-1",
+                                "name": "Read",
+                                "input": {"path": "/x"},
+                            },
+                        ],
+                    },
+                },
+                {
+                    "type": "assistant",
+                    "timestamp": "2026-04-28T10:00:14Z",
+                    "message": {
+                        "id": "a2",
+                        "role": "assistant",
+                        "model": "claude-x",
+                        "content": [{"type": "text", "text": "done"}],
+                    },
+                },
+            ],
+            tool_results_by_id={
+                "task-1": _result("explored", ts="2026-04-28T10:00:12Z"),
+                "read-1": _result("body", ts="2026-04-28T10:00:00.5Z"),
+            },
+        )
+
+        payload = build_turn_payload(turn)
+
+        by_id = {tc.id: tc for tc in payload.tool_calls}
+        self.assertAlmostEqual(by_id["task-1"].duration_s, 12.0, places=3)
+        self.assertEqual(by_id["task-1"].subagent_type, "Explore")
+        self.assertAlmostEqual(by_id["read-1"].duration_s, 0.5, places=3)
+        self.assertIsNone(by_id["read-1"].subagent_type)
 
     def test_build_turn_payload_handles_missing_timestamps_and_usage(self) -> None:
         turn = Turn(
@@ -151,7 +216,7 @@ class ProviderCommonTest(unittest.TestCase):
                     }
                 }
             ],
-            tool_results_by_id={"t1": long},
+            tool_results_by_id={"t1": _result(long)},
         )
 
         payload = build_turn_payload(turn)

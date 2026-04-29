@@ -89,16 +89,21 @@ class LangfuseProvider:
                         pass
 
                 for tc in payload.tool_calls:
+                    tool_meta: dict[str, Any] = {
+                        "tool_name": tc.name,
+                        "tool_id": tc.id,
+                        "input_meta": tc.input_meta,
+                        "output_meta": tc.output_meta,
+                    }
+                    if tc.duration_s is not None:
+                        tool_meta["duration_seconds"] = tc.duration_s
+                    if tc.subagent_type:
+                        tool_meta["subagent_type"] = tc.subagent_type
                     with self._langfuse.start_as_current_observation(
                         name=f"Tool: {tc.name}",
                         as_type="tool",
                         input=tc.input,
-                        metadata={
-                            "tool_name": tc.name,
-                            "tool_id": tc.id,
-                            "input_meta": tc.input_meta,
-                            "output_meta": tc.output_meta,
-                        },
+                        metadata=tool_meta,
                     ) as tool_obs:
                         tool_obs.update(output=tc.output)
 

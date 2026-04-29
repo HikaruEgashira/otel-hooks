@@ -79,14 +79,17 @@ class DatadogProvider:
                     service="otel-hooks",
                     span_type="tool",
                 ) as tool_span:
-                    tool_span.set_tags(
-                        {
-                            "tool.name": tc.name,
-                            "tool.id": tc.id,
-                            "tool.input": in_str,
-                            "tool.output": tc.output or "",
-                        }
-                    )
+                    tool_tags: dict[str, str] = {
+                        "tool.name": tc.name,
+                        "tool.id": tc.id,
+                        "tool.input": in_str,
+                        "tool.output": tc.output or "",
+                    }
+                    if tc.duration_s is not None:
+                        tool_tags["tool.duration_seconds"] = str(tc.duration_s)
+                    if tc.subagent_type:
+                        tool_tags["tool.subagent_type"] = tc.subagent_type
+                    tool_span.set_tags(tool_tags)
 
     def emit_metric(
         self,

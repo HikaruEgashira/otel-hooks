@@ -36,6 +36,7 @@ class TranscriptDomainTest(unittest.TestCase):
             },
             {
                 "type": "user",
+                "timestamp": "2026-04-28T12:00:05Z",
                 "message": {
                     "role": "user",
                     "content": [
@@ -68,7 +69,11 @@ class TranscriptDomainTest(unittest.TestCase):
         turns = transcript.build_turns(messages)
 
         self.assertEqual(len(turns), 1)
-        self.assertEqual(turns[0].tool_results_by_id["tool-1"], "ok")
+        record = turns[0].tool_results_by_id["tool-1"]
+        self.assertIsInstance(record, transcript.ToolResultRecord)
+        self.assertEqual(record.content, "ok")
+        self.assertIsNotNone(record.timestamp)
+        self.assertEqual(record.timestamp.isoformat(), "2026-04-28T12:00:05+00:00")
         # 同一 assistant id は最新版に置き換わる
         assistant_text = transcript.extract_text(transcript.get_content(turns[0].assistant_msgs[0]))
         self.assertEqual(assistant_text, "final answer")
