@@ -22,10 +22,22 @@ _USAGE_KEYS = (
 
 
 @dataclass
+class ToolResultRecord:
+    """A tool_result with the entry timestamp it arrived in.
+
+    Storing the timestamp lets `build_turn_payload` compute per-tool wall time as
+    (tool_result entry timestamp) - (tool_use's containing assistant entry timestamp).
+    """
+
+    content: Any
+    timestamp: datetime | None
+
+
+@dataclass
 class Turn:
     user_msg: dict[str, Any]
     assistant_msgs: list[dict[str, Any]]
-    tool_results_by_id: dict[str, Any]
+    tool_results_by_id: dict[str, ToolResultRecord]
 
 
 def get_content(msg: dict[str, Any]) -> Any:
@@ -165,7 +177,7 @@ def build_turns(messages: list[dict[str, Any]]) -> list[Turn]:
     current_user: dict[str, Any] | None = None
     assistant_order: list[str] = []
     assistant_latest: dict[str, dict[str, Any]] = {}
-    tool_results_by_id: dict[str, Any] = {}
+    tool_results_by_id: dict[str, ToolResultRecord] = {}
 
     def flush_turn() -> None:
         nonlocal current_user, assistant_order, assistant_latest, tool_results_by_id
@@ -183,10 +195,14 @@ def build_turns(messages: list[dict[str, Any]]) -> list[Turn]:
     for msg in messages:
         role = get_role(msg)
         if is_tool_result(msg):
+            entry_ts = get_timestamp(msg)
             for tr in iter_tool_results(get_content(msg)):
                 tid = tr.get("tool_use_id")
                 if tid:
-                    tool_results_by_id[str(tid)] = tr.get("content")
+                    tool_results_by_id[str(tid)] = ToolResultRecord(
+                        content=tr.get("content"),
+                        timestamp=entry_ts,
+                    )
             continue
         if role == "user":
             flush_turn()

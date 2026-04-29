@@ -8,7 +8,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from otel_hooks.domain.transcript import Turn
+from datetime import datetime
+
+from otel_hooks.domain.transcript import ToolResultRecord, Turn
+
+
+def _ts(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
 def _sample_turn() -> Turn:
@@ -44,7 +50,42 @@ def _sample_turn() -> Turn:
                 },
             }
         ],
-        tool_results_by_id={"t1": {"ok": True}},
+        tool_results_by_id={
+            "t1": ToolResultRecord(content={"ok": True}, timestamp=_ts("2026-04-28T10:00:05Z")),
+        },
+    )
+
+
+def _explore_turn() -> Turn:
+    return Turn(
+        user_msg={
+            "type": "user",
+            "timestamp": "2026-04-28T10:00:00Z",
+            "message": {"role": "user", "content": [{"type": "text", "text": "investigate"}]},
+        },
+        assistant_msgs=[
+            {
+                "type": "assistant",
+                "timestamp": "2026-04-28T10:00:00Z",
+                "message": {
+                    "id": "a1",
+                    "role": "assistant",
+                    "model": "gpt-5",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "task-1",
+                            "name": "Task",
+                            "input": {"description": "find bug", "subagent_type": "Explore"},
+                        },
+                        {"type": "text", "text": "delegated"},
+                    ],
+                },
+            }
+        ],
+        tool_results_by_id={
+            "task-1": ToolResultRecord(content="found", timestamp=_ts("2026-04-28T10:00:42Z")),
+        },
     )
 
 
@@ -241,6 +282,9 @@ class ProviderContractTest(unittest.TestCase):
         self.assertEqual(gen_obs.payload["usage_details"]["output"], 22)
         self.assertEqual(gen_obs.payload["usage_details"]["cache_read_input_tokens"], 33)
         self.assertEqual(client.observations[1].updates[0]["output"], '{"ok": true}')
+        tool_meta = client.observations[1].payload["metadata"]
+        self.assertEqual(tool_meta["duration_seconds"], 2.0)
+        self.assertNotIn("subagent_type", tool_meta)
         self.assertTrue(client.flush_called)
         self.assertTrue(client.shutdown_called)
         self.assertEqual(len(fake_langfuse.propagate_calls), 2)
@@ -272,10 +316,26 @@ class ProviderContractTest(unittest.TestCase):
         self.assertEqual(gen_attrs["gen_ai.usage.input_tokens"], 11)
         self.assertEqual(gen_attrs["gen_ai.message.index"], 0)
         self.assertEqual(spans[2].payload["name"], "Tool: read")
+        tool_attrs = spans[2].payload["attributes"]
+        self.assertEqual(tool_attrs["tool.duration_seconds"], 2.0)
+        self.assertNotIn("tool.subagent_type", tool_attrs)
         self.assertEqual(spans[3].payload["name"], "Metric - tool_started")
         self.assertEqual(spans[3].payload["attributes"]["metric.attr.tool_name"], "read")
         self.assertTrue(fake_provider.force_flush_called)
         self.assertTrue(fake_provider.shutdown_called)
+
+    def test_otlp_provider_emits_subagent_type_for_task_tool(self) -> None:
+        fake_modules = _build_fake_otlp_modules()
+        with _patch_modules(fake_modules):
+            mod = _import_fresh("otel_hooks.providers.otlp")
+            provider = mod.OTLPProvider("http://collector")
+            provider.emit_turn("s1", 1, _explore_turn(), Path("/tmp/t.jsonl"), "claude")
+        spans = provider._provider.tracer.spans
+        # Turn span, one Generation span, one Tool span
+        self.assertEqual(spans[2].payload["name"], "Tool: Task")
+        attrs = spans[2].payload["attributes"]
+        self.assertEqual(attrs["tool.subagent_type"], "Explore")
+        self.assertEqual(attrs["tool.duration_seconds"], 42.0)
 
     def test_datadog_provider_emits_expected_span_shape(self) -> None:
         from otel_hooks.providers.datadog import DatadogProvider
@@ -297,6 +357,8 @@ class ProviderContractTest(unittest.TestCase):
         self.assertEqual(spans[1].meta["gen_ai.usage.input_tokens"], "11")
         self.assertEqual(spans[1].meta["gen_ai.message.index"], "0")
         self.assertEqual(spans[2].name, "ai_session.tool")
+        self.assertEqual(spans[2].meta["tool.duration_seconds"], "2.0")
+        self.assertNotIn("tool.subagent_type", spans[2].meta)
         self.assertEqual(spans[3].name, "ai_session.metric")
         self.assertEqual(spans[3].meta["metric.attr.tool_name"], "read")
 

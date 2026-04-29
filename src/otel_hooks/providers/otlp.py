@@ -77,14 +77,19 @@ class OTLPProvider:
 
             for tc in payload.tool_calls:
                 in_str = tc.input if isinstance(tc.input, str) else json.dumps(tc.input, ensure_ascii=False)
+                tool_attrs: dict[str, str | int | float] = {
+                    "tool.name": tc.name,
+                    "tool.id": tc.id,
+                    "tool.input": in_str,
+                    "tool.output": tc.output or "",
+                }
+                if tc.duration_s is not None:
+                    tool_attrs["tool.duration_seconds"] = tc.duration_s
+                if tc.subagent_type:
+                    tool_attrs["tool.subagent_type"] = tc.subagent_type
                 with self._tracer.start_as_current_span(
                     f"Tool: {tc.name}",
-                    attributes={
-                        "tool.name": tc.name,
-                        "tool.id": tc.id,
-                        "tool.input": in_str,
-                        "tool.output": tc.output or "",
-                    },
+                    attributes=tool_attrs,
                 ):
                     pass
 

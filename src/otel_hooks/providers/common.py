@@ -8,6 +8,7 @@ from typing import Any
 
 from otel_hooks.domain.transcript import (
     MAX_CHARS_DEFAULT,
+    ToolResultRecord,
     Turn,
     extract_text,
     get_content,
@@ -20,6 +21,8 @@ from otel_hooks.domain.transcript import (
     truncate_text,
 )
 
+_SUBAGENT_TOOL_NAMES = frozenset({"Task", "Agent"})
+
 
 @dataclass
 class ToolCall:
@@ -29,6 +32,8 @@ class ToolCall:
     output: str | None
     input_meta: dict[str, Any] | None
     output_meta: dict[str, Any] | None
+    duration_s: float | None = None
+    subagent_type: str | None = None
 
 
 @dataclass
@@ -59,15 +64,24 @@ class TurnPayload:
 def _tool_calls_from_assistants(assistant_msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
     for am in assistant_msgs:
+        request_ts = get_timestamp(am)
         for tu in iter_tool_uses(get_content(am)):
             tid = tu.get("id") or ""
+            name = tu.get("name") or "unknown"
+            raw_input = tu.get("input")
+            input_obj = raw_input if isinstance(raw_input, (dict, list, str, int, float, bool)) else {}
+            subagent_type: str | None = None
+            if name in _SUBAGENT_TOOL_NAMES and isinstance(raw_input, dict):
+                st = raw_input.get("subagent_type")
+                if isinstance(st, str) and st:
+                    subagent_type = st
             calls.append(
                 {
                     "id": str(tid),
-                    "name": tu.get("name") or "unknown",
-                    "input": tu.get("input")
-                    if isinstance(tu.get("input"), (dict, list, str, int, float, bool))
-                    else {},
+                    "name": name,
+                    "input": input_obj,
+                    "request_ts": request_ts,
+                    "subagent_type": subagent_type,
                 }
             )
     return calls
@@ -112,10 +126,17 @@ def build_turn_payload(turn: Turn, *, max_chars: int = MAX_CHARS_DEFAULT) -> Tur
 
         output: str | None = None
         output_meta: dict[str, Any] | None = None
+        duration_s: float | None = None
         if c["id"] and c["id"] in turn.tool_results_by_id:
-            out_raw = turn.tool_results_by_id[c["id"]]
+            record: ToolResultRecord = turn.tool_results_by_id[c["id"]]
+            out_raw = record.content
             out_str = out_raw if isinstance(out_raw, str) else json.dumps(out_raw, ensure_ascii=False)
             output, output_meta = truncate_text(out_str, max_chars)
+            req_ts = c.get("request_ts")
+            if req_ts is not None and record.timestamp is not None:
+                delta = (record.timestamp - req_ts).total_seconds()
+                if delta >= 0:
+                    duration_s = delta
 
         tool_calls.append(
             ToolCall(
@@ -125,6 +146,8 @@ def build_turn_payload(turn: Turn, *, max_chars: int = MAX_CHARS_DEFAULT) -> Tur
                 output=output,
                 input_meta=input_meta,
                 output_meta=output_meta,
+                duration_s=duration_s,
+                subagent_type=c.get("subagent_type"),
             )
         )
 
