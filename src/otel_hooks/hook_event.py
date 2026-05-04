@@ -61,6 +61,7 @@ _METRIC_EVENT_MAP: dict[str, EventType] = {
     # New events from upstream specs
     "sessionStart": EventType.SESSION_START,
     "SessionStart": EventType.SESSION_START,
+    "Setup": EventType.SESSION_START,
     "errorOccurred": EventType.SESSION_END,
     "ErrorOccurred": EventType.SESSION_END,
     "agentSpawn": EventType.SESSION_START,
