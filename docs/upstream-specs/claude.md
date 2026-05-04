@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-04-27
+> Snapshot: 2026-05-04
 
 ## Config Location
 
@@ -47,11 +47,12 @@
 - `prompt` — LLM prompt (`prompt`, `model`)
 - `agent` — agent invocation (`prompt`, `model`) [experimental]
 
-## Hook Events (28 total)
+## Hook Events (29 total)
 
 | Event | Blockable | Matcher Target |
 |-------|-----------|----------------|
 | SessionStart | No | source: `startup\|resume\|clear\|compact` |
+| Setup | No | trigger: `init\|maintenance` |
 | InstructionsLoaded | No | load_reason: `session_start\|nested_traversal\|path_glob_match\|include\|compact` |
 | UserPromptSubmit | Yes (exit 2) | — |
 | UserPromptExpansion | Yes (exit 2) | command_name |
@@ -102,6 +103,10 @@
 - `model`: string
 - `agent_type`: string (optional)
 
+### Setup
+
+- `trigger`: `init|maintenance`
+
 ### InstructionsLoaded
 
 - `file_path`: string
@@ -120,7 +125,7 @@
 - `expansion_type`: `slash_command|mcp_prompt`
 - `command_name`: string
 - `command_args`: string
-- `command_source`: `plugin|builtin|custom`
+- `command_source`: `plugin|project|user`
 - `prompt`: string (original unexpanded prompt)
 
 ### PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / PermissionDenied
@@ -291,7 +296,7 @@
 - `$CLAUDE_PLUGIN_ROOT` — plugin install dir
 - `$CLAUDE_PLUGIN_DATA` — plugin data dir
 - `$CLAUDE_CODE_REMOTE` — `"true"` in web environments
-- `$CLAUDE_ENV_FILE` — env persist file (SessionStart, CwdChanged, FileChanged only)
+- `$CLAUDE_ENV_FILE` — env persist file (SessionStart, Setup, CwdChanged, FileChanged only)
 
 ## Constraints
 

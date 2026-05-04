@@ -1,7 +1,7 @@
 # Kiro Hooks Specification
 
 > Source: https://kiro.dev/docs/cli/hooks/
-> Snapshot: 2026-04-04
+> Snapshot: 2026-05-04
 
 ## Config Location
 
@@ -25,7 +25,8 @@
 ```json
 {
   "hook_event_name": "string",
-  "cwd": "string"
+  "cwd": "string",
+  "session_id": "string"
 }
 ```
 

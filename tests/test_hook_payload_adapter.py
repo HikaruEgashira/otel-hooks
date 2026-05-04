@@ -191,6 +191,33 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source, "claude")
         self.assertEqual(event.type, EventType.TOOL_END)
 
+    def test_parse_hook_event_for_claude_setup_event(self) -> None:
+        """Setup maps to SESSION_START (added in 2026-05-04 spec update)."""
+        payload = {
+            "source_tool": "claude",
+            "hook_event_name": "Setup",
+            "session_id": "s1",
+            "trigger": "init",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "claude")
+        self.assertEqual(event.type, EventType.SESSION_START)
+
+    def test_parse_hook_event_for_kiro_with_session_id(self) -> None:
+        """Kiro payloads now include session_id in common fields (2026-05-04 spec update)."""
+        payload = {
+            "hook_event_name": "userPromptSubmit",
+            "cwd": "/tmp",
+            "session_id": "kiro-sess-1",
+            "prompt": "hello",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "kiro")
+        self.assertEqual(event.type, EventType.PROMPT_SUBMIT)
+        self.assertEqual(event.session_id, "kiro-sess-1")
+
 
 if __name__ == "__main__":
     unittest.main()
