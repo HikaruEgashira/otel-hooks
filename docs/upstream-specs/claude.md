@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-05-04
+> Snapshot: 2026-05-11
 
 ## Config Location
 
@@ -10,6 +10,8 @@
 | Global | `~/.claude/settings.json` |
 | Project | `.claude/settings.json` |
 | Local | `.claude/settings.local.json` |
+| Plugin | `hooks/hooks.json` (when plugin enabled) |
+| Skill/Agent | Frontmatter (while component active) |
 
 ## Config Schema
 
@@ -90,6 +92,9 @@
   "cwd": "string",
   "permission_mode": "default|plan|acceptEdits|auto|dontAsk|bypassPermissions",
   "hook_event_name": "string",
+  "effort": {
+    "level": "low|medium|high|xhigh|max"
+  },
   "agent_id": "string (subagent only)",
   "agent_type": "string (subagent/--agent only)"
 }
@@ -128,21 +133,29 @@
 - `command_source`: `plugin|project|user`
 - `prompt`: string (original unexpanded prompt)
 
-### PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / PermissionDenied
+### PreToolUse / PermissionRequest / PermissionDenied
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
-- `tool_response`: object (PostToolUse only)
-- `duration_ms`: number (PostToolUse, PostToolUseFailure only)
-- `error`: string (PostToolUseFailure only)
-- `is_interrupt`: boolean (PostToolUseFailure only)
-- `denial_reason`: string (PermissionDenied only)
-- `permission_suggestions`: array (PermissionRequest only)
+
+### PostToolUse
+
+- `tool_name`: string
+- `tool_input`: object (tool-specific)
+- `tool_use_id`: string
+- `tool_result`: string
+
+### PostToolUseFailure
+
+- `tool_name`: string
+- `tool_input`: object (tool-specific)
+- `tool_use_id`: string
+- `error`: string
 
 ### PostToolBatch
 
-- `tool_calls`: array of `{ tool_name, tool_input, tool_response }`
+- `tool_uses`: array of `{ tool_name, tool_use_id, tool_input, tool_result?, error? }`
 
 ### Notification
 
@@ -155,20 +168,21 @@
 
 - `agent_id`: string
 - `agent_type`: string
+- `prompt`: string (SubagentStart only)
 
 ### TaskCreated
 
 - `task_id`: string
-- `task_description`: string
+- `task_title`: string (optional)
 
 ### TaskCompleted
 
 - `task_id`: string
-- `task_description`: string
+- `task_title`: string (optional)
 
 ### CwdChanged
 
-- `previous_cwd`: string
+- `old_cwd`: string
 - `new_cwd`: string
 
 ### FileChanged
@@ -179,11 +193,13 @@
 ### ConfigChange
 
 - `config_source`: `user_settings|project_settings|local_settings|policy_settings|skills`
-- `changed_keys`: string[]
+- `file_path`: string
 
 ### WorktreeCreate
 
-- `worktree_path`: string
+- `base_path`: string
+- `worktree_name`: string
+- `ref`: string (optional)
 
 ### WorktreeRemove
 
@@ -210,13 +226,13 @@
 
 ### StopFailure
 
-- `error_type`: `rate_limit|authentication_failed|billing_error|invalid_request|server_error|max_output_tokens|unknown`
+- `error_type`: `rate_limit|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|server_error|max_output_tokens|unknown`
 - `error_message`: string
 
 ### TeammateIdle
 
+- `teammate_id`: string
 - `agent_type`: string
-- `agent_id`: string
 
 ### Stop
 
@@ -269,13 +285,15 @@
 
 - `hookSpecificOutput.decision.behavior`: `allow|deny`
 - `hookSpecificOutput.decision.updatedInput`: object
-- `hookSpecificOutput.decision.updatedPermissions`: array
-- `hookSpecificOutput.decision.message`: string (deny)
-- `hookSpecificOutput.decision.interrupt`: boolean (deny)
+- `hookSpecificOutput.decision.permissionRules`: array of rule strings
 
 ### PermissionDenied
 
 - `hookSpecificOutput.retry`: boolean
+
+### WorktreeCreate
+
+- `hookSpecificOutput.worktreePath`: string (absolute path)
 
 ### Elicitation / ElicitationResult
 
@@ -296,6 +314,7 @@
 - `$CLAUDE_PLUGIN_ROOT` — plugin install dir
 - `$CLAUDE_PLUGIN_DATA` — plugin data dir
 - `$CLAUDE_CODE_REMOTE` — `"true"` in web environments
+- `$CLAUDE_EFFORT` — effort level (`low`, `medium`, `high`, `xhigh`, `max`)
 - `$CLAUDE_ENV_FILE` — env persist file (SessionStart, Setup, CwdChanged, FileChanged only)
 
 ## Constraints

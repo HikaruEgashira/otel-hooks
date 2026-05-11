@@ -1,7 +1,7 @@
 # Kiro Hooks Specification
 
 > Source: https://kiro.dev/docs/cli/hooks/
-> Snapshot: 2026-05-04
+> Snapshot: 2026-05-11
 
 ## Config Location
 
@@ -29,6 +29,12 @@
   "session_id": "string"
 }
 ```
+
+## Per-Event Additional Fields
+
+### userPromptSubmit
+
+- `prompt`: string (user's input text)
 
 ## Tool-Related Events (preToolUse, postToolUse)
 
