@@ -66,6 +66,21 @@ _METRIC_EVENT_MAP: dict[str, EventType] = {
     "ErrorOccurred": EventType.SESSION_END,
     "agentSpawn": EventType.SESSION_START,
     "AgentSpawn": EventType.SESSION_START,
+    # Copilot new events (2026-05-18 spec sync)
+    "agentStop": EventType.SESSION_END,
+    "AgentStop": EventType.SESSION_END,
+    "notification": EventType.SESSION_END,
+    "Notification": EventType.SESSION_END,
+    "permissionRequest": EventType.TOOL_START,
+    "PermissionRequest": EventType.TOOL_START,
+    "postToolUseFailure": EventType.TOOL_END,
+    "PostToolUseFailure": EventType.TOOL_END,
+    "preCompact": EventType.SESSION_END,
+    "PreCompact": EventType.SESSION_END,
+    "subagentStart": EventType.SESSION_START,
+    "SubagentStart": EventType.SESSION_START,
+    "subagentStop": EventType.SESSION_END,
+    "SubagentStop": EventType.SESSION_END,
 }
 
 

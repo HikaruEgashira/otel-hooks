@@ -13,7 +13,13 @@ from . import Scope, register_tool
 from .json_io import load_json, save_json
 
 HOOKS_FILE = "otel-hooks.json"
-_HOOK_EVENTS = ("sessionStart", "userPromptSubmitted", "preToolUse", "postToolUse", "sessionEnd", "errorOccurred")
+_HOOK_EVENTS = (
+    "sessionStart", "userPromptSubmitted", "preToolUse", "postToolUse",
+    "sessionEnd", "errorOccurred",
+    # Added in 2026-05-18 spec sync
+    "agentStop", "notification", "permissionRequest", "postToolUseFailure",
+    "preCompact", "subagentStart", "subagentStop",
+)
 _EVENT_ALIASES = {
     "sessionStart": "session_start",
     "SessionStart": "session_start",
@@ -28,6 +34,20 @@ _EVENT_ALIASES = {
     "SessionEnd": "session_end",
     "errorOccurred": "error_occurred",
     "ErrorOccurred": "error_occurred",
+    "agentStop": "agent_stop",
+    "AgentStop": "agent_stop",
+    "notification": "notification",
+    "Notification": "notification",
+    "permissionRequest": "permission_request",
+    "PermissionRequest": "permission_request",
+    "postToolUseFailure": "post_tool_use_failure",
+    "PostToolUseFailure": "post_tool_use_failure",
+    "preCompact": "pre_compact",
+    "PreCompact": "pre_compact",
+    "subagentStart": "subagent_start",
+    "SubagentStart": "subagent_start",
+    "subagentStop": "subagent_stop",
+    "SubagentStop": "subagent_stop",
 }
 
 
@@ -39,9 +59,11 @@ class CopilotConfig:
         return "copilot"
 
     def scopes(self) -> list[Scope]:
-        return [Scope.PROJECT]
+        return [Scope.GLOBAL, Scope.PROJECT]
 
     def settings_path(self, scope: Scope) -> Path:
+        if scope is Scope.GLOBAL:
+            return Path.home() / ".copilot" / "hooks" / HOOKS_FILE
         return Path.cwd() / ".github" / "hooks" / HOOKS_FILE
 
     def load_settings(self, scope: Scope) -> Dict[str, Any]:
