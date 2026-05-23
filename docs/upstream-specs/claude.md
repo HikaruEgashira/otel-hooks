@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-05-11
+> Snapshot: 2026-05-18
 
 ## Config Location
 
@@ -43,13 +43,13 @@
 
 ### Hook Types
 
-- `command` — shell command (`command`, `async`, `asyncRewake`, `shell`)
+- `command` — shell command (`command`, `args`, `async`, `asyncRewake`, `shell`); when `args` present uses exec form (no shell)
 - `http` — POST request (`url`, `headers`, `allowedEnvVars`)
 - `mcp_tool` — MCP tool call (`server`, `tool`, `input` with `${path}` substitution)
 - `prompt` — LLM prompt (`prompt`, `model`)
 - `agent` — agent invocation (`prompt`, `model`) [experimental]
 
-## Hook Events (29 total)
+## Hook Events (30 total)
 
 | Event | Blockable | Matcher Target |
 |-------|-----------|----------------|
@@ -130,7 +130,7 @@
 - `expansion_type`: `slash_command|mcp_prompt`
 - `command_name`: string
 - `command_args`: string
-- `command_source`: `plugin|project|user`
+- `command_source`: `plugin|skill|custom`
 - `prompt`: string (original unexpanded prompt)
 
 ### PreToolUse / PermissionRequest / PermissionDenied
@@ -236,7 +236,8 @@
 
 ### Stop
 
-(no extra fields)
+- `turn_count`: number
+- `message`: string (Claude's final message)
 
 ### SessionEnd
 
@@ -249,7 +250,8 @@
   "continue": true,
   "stopReason": "string",
   "suppressOutput": false,
-  "systemMessage": "string"
+  "systemMessage": "string",
+  "terminalSequence": "string (OSC/BEL escape sequences only)"
 }
 ```
 

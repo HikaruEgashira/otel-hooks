@@ -178,6 +178,60 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source, "claude")
         self.assertEqual(event.type, EventType.PROMPT_SUBMIT)
 
+    def test_parse_hook_event_for_copilot_agent_stop(self) -> None:
+        """agentStop maps to SESSION_END (new Copilot event, 2026-05-18 spec)."""
+        payload = {
+            "source_tool": "copilot",
+            "hook_event_name": "agentStop",
+            "sessionId": "cp-1",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.SESSION_END)
+        self.assertEqual(event.session_id, "cp-1")
+
+    def test_parse_hook_event_for_copilot_subagent_start(self) -> None:
+        """subagentStart maps to SESSION_START (new Copilot event, 2026-05-18 spec)."""
+        payload = {
+            "source_tool": "copilot",
+            "hook_event_name": "subagentStart",
+            "sessionId": "cp-2",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.SESSION_START)
+
+    def test_parse_hook_event_for_copilot_post_tool_use_failure(self) -> None:
+        """postToolUseFailure maps to TOOL_END (new Copilot event, 2026-05-18 spec)."""
+        payload = {
+            "source_tool": "copilot",
+            "hook_event_name": "postToolUseFailure",
+            "sessionId": "cp-3",
+            "toolName": "bash",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.TOOL_END)
+
+    def test_parse_hook_event_for_copilot_permission_request(self) -> None:
+        """permissionRequest maps to TOOL_START (new Copilot event, 2026-05-18 spec)."""
+        payload = {
+            "source_tool": "copilot",
+            "hook_event_name": "permissionRequest",
+            "sessionId": "cp-4",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.TOOL_START)
+
     def test_parse_hook_event_for_claude_post_tool_batch(self) -> None:
         """PostToolBatch maps to TOOL_END; tool_uses replaces tool_calls (2026-05-11 spec)."""
         payload = {

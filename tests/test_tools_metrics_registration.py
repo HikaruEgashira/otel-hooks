@@ -21,7 +21,12 @@ class MetricsHookRegistrationTest(unittest.TestCase):
         updated = cfg.register_hook(settings)
         hooks = updated["hooks"]
 
-        for event_name in ("sessionStart", "userPromptSubmitted", "preToolUse", "postToolUse", "sessionEnd", "errorOccurred"):
+        for event_name in (
+            "sessionStart", "userPromptSubmitted", "preToolUse", "postToolUse",
+            "sessionEnd", "errorOccurred",
+            "agentStop", "notification", "permissionRequest", "postToolUseFailure",
+            "preCompact", "subagentStart", "subagentStop",
+        ):
             self.assertIn(event_name, hooks)
             self.assertTrue(
                 any("otel-hooks hook" in item.get("bash", "") for item in hooks[event_name])
@@ -48,6 +53,13 @@ class MetricsHookRegistrationTest(unittest.TestCase):
                 "postToolUse": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
                 "sessionEnd": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
                 "errorOccurred": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
+                "agentStop": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
+                "notification": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
+                "permissionRequest": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
+                "postToolUseFailure": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
+                "preCompact": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
+                "subagentStart": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
+                "subagentStop": [{"type": "command", "bash": COPILOT_HOOK_COMMAND}],
             },
         }
 
