@@ -1,7 +1,7 @@
 # GitHub Copilot Hooks Specification
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-05-18
+> Snapshot: 2026-05-26
 
 ## Config Location
 
@@ -176,7 +176,11 @@ Optional regex patterns supported for: `notification`, `permissionRequest`, `pre
 {
   "sessionId": "string",
   "timestamp": "number (Unix ms)",
-  "cwd": "string"
+  "cwd": "string",
+  "transcriptPath": "string",
+  "agentName": "string",
+  "agentDisplayName": "string (optional)",
+  "agentDescription": "string (optional)"
 }
 ```
 
@@ -188,7 +192,36 @@ Optional regex patterns supported for: `notification`, `permissionRequest`, `pre
   "timestamp": "number (Unix ms)",
   "cwd": "string",
   "transcriptPath": "string",
+  "agentName": "string",
+  "agentDisplayName": "string (optional)",
   "stopReason": "string"
+}
+```
+
+### preCompact
+
+```json
+{
+  "sessionId": "string",
+  "timestamp": "number (Unix ms)",
+  "cwd": "string",
+  "transcriptPath": "string",
+  "trigger": "manual|auto",
+  "customInstructions": "string"
+}
+```
+
+### notification
+
+```json
+{
+  "sessionId": "string",
+  "timestamp": "number (Unix ms)",
+  "cwd": "string",
+  "hook_event_name": "Notification",
+  "message": "string",
+  "title": "string (optional)",
+  "notification_type": "shell_completed|shell_detached_completed|agent_completed|agent_idle|permission_prompt|elicitation_dialog"
 }
 ```
 
@@ -205,6 +238,18 @@ Optional regex patterns supported for: `notification`, `permissionRequest`, `pre
 ```
 
 Note: only `deny` is processed.
+
+### postToolUse
+
+```json
+{
+  "modifiedResult": {
+    "resultType": "success",
+    "textResultForLlm": "string"
+  },
+  "additionalContext": "string (optional)"
+}
+```
 
 ### agentStop / subagentStop
 
@@ -239,4 +284,4 @@ Note: only `deny` is processed.
 - Multiple hooks of same type execute sequentially
 - Scripts read JSON from stdin
 - `disableAllHooks: true` disables all hooks in a file
-- No `transcript_path` in most payloads (metrics-only tool except agentStop/subagentStop)
+- `transcriptPath` now included in `agentStop`, `subagentStart`, `subagentStop`, `preCompact`

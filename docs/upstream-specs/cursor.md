@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-04-04
+> Snapshot: 2026-05-26
 
 ## Config Location
 
@@ -54,7 +54,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 }
 ```
 
-## Hook Events (20 total: 18 Agent + 2 Tab)
+## Hook Events (21 total: 18 Agent + 2 Tab + 1 Lifecycle)
 
 ### Agent Hooks (Cmd+K / Agent Chat)
 
@@ -85,6 +85,12 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 |-------|-------------|-------------|
 | `beforeTabFileRead` | Yes (allow/deny) | Before Tab reads file |
 | `afterTabFileEdit` | No (observe) | After Tab edits file |
+
+### Lifecycle Hooks (Outside Agent Sessions)
+
+| Event | Controllable | Description |
+|-------|-------------|-------------|
+| `workspaceOpen` | No (fire-and-forget) | Workspace opens; returns plugin paths |
 
 ## Common Input Fields (all events)
 
@@ -358,6 +364,22 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   }]
 }
 // Output: none
+```
+
+### workspaceOpen
+
+```json
+// Input (omits conversation/generation/model fields)
+{
+  "hook_event_name": "workspaceOpen",
+  "cursor_version": "string",
+  "workspace_roots": ["string"],
+  "user_email": "string|null"
+}
+// Output
+{
+  "pluginPaths": ["string"]
+}
 ```
 
 ### beforeSubmitPrompt
