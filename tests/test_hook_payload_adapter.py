@@ -233,12 +233,12 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.type, EventType.TOOL_START)
 
     def test_parse_hook_event_for_claude_post_tool_batch(self) -> None:
-        """PostToolBatch maps to TOOL_END; tool_uses replaces tool_calls (2026-05-11 spec)."""
+        """PostToolBatch maps to TOOL_END; tool_results field (2026-05-26 spec)."""
         payload = {
             "source_tool": "claude",
             "hook_event_name": "PostToolBatch",
             "session_id": "s1",
-            "tool_uses": [{"tool_name": "Read", "tool_use_id": "tu1", "tool_input": {}, "tool_result": "ok"}],
+            "tool_results": [{"tool_name": "Read", "tool_use_id": "tu1", "tool_input": {}, "tool_output": "ok"}],
         }
         event = parse_hook_event(payload)
         self.assertIsNotNone(event)

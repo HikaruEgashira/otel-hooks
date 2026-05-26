@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-05-18
+> Snapshot: 2026-05-26
 
 ## Config Location
 
@@ -77,8 +77,8 @@
 | FileChanged | No | filename (basename) |
 | WorktreeCreate | Yes (exit 2) | — |
 | WorktreeRemove | No | — |
-| PreCompact | No | compaction_type: `manual\|auto` |
-| PostCompact | No | compaction_type: `manual\|auto` |
+| PreCompact | Yes (exit 2) | trigger: `manual\|auto` |
+| PostCompact | No | trigger: `manual\|auto` |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
 | SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
@@ -130,7 +130,7 @@
 - `expansion_type`: `slash_command|mcp_prompt`
 - `command_name`: string
 - `command_args`: string
-- `command_source`: `plugin|skill|custom`
+- `command_source`: `plugin|user|custom`
 - `prompt`: string (original unexpanded prompt)
 
 ### PreToolUse / PermissionRequest / PermissionDenied
@@ -144,7 +144,7 @@
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
-- `tool_result`: string
+- `tool_output`: string
 
 ### PostToolUseFailure
 
@@ -155,20 +155,20 @@
 
 ### PostToolBatch
 
-- `tool_uses`: array of `{ tool_name, tool_use_id, tool_input, tool_result?, error? }`
+- `tool_results`: array of `{ tool_name, tool_use_id, tool_input, tool_output?, error? }`
 
 ### Notification
 
 - `message`: string
 - `title`: string (optional)
-- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog`
+- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_complete|elicitation_response`
 - `notification_data`: object (optional)
 
 ### SubagentStart / SubagentStop
 
 - `agent_id`: string
 - `agent_type`: string
-- `prompt`: string (SubagentStart only)
+- `task`: string (SubagentStart only)
 
 ### TaskCreated
 
@@ -182,13 +182,14 @@
 
 ### CwdChanged
 
-- `old_cwd`: string
+- `previous_cwd`: string
 - `new_cwd`: string
 
 ### FileChanged
 
 - `file_path`: string
-- `change_type`: `modified|created|deleted`
+- `file_size`: number
+- `modification_time`: number (Unix seconds)
 
 ### ConfigChange
 
@@ -197,47 +198,48 @@
 
 ### WorktreeCreate
 
-- `base_path`: string
-- `worktree_name`: string
-- `ref`: string (optional)
+- `isolation_type`: `worktree`
+- `subagent_id`: string (optional)
 
 ### WorktreeRemove
 
 - `worktree_path`: string
+- `isolation_type`: `worktree`
+- `subagent_id`: string (optional)
 
 ### PreCompact / PostCompact
 
-- `trigger`: `manual|auto`
-- `estimated_removed_turns`: number (PreCompact only)
-- `removed_turns`: number (PostCompact only)
+- `compaction_trigger`: `manual|auto`
+- `context_used`: number (PreCompact only)
+- `context_limit`: number (PreCompact only)
 
 ### Elicitation
 
-- `server_name`: string
-- `tool_name`: string
-- `fields`: array of `{ name, label, type, required, options? }`
+- `mcp_server_name`: string
+- `request_id`: string
+- `message`: string
+- `form_schema`: object (JSON Schema)
 
 ### ElicitationResult
 
-- `server_name`: string
-- `tool_name`: string
-- `user_action`: `accepted|declined|cancelled`
-- `user_content`: object
+- `mcp_server_name`: string
+- `request_id`: string
+- `action`: `accept|decline|cancel`
+- `content`: object
 
 ### StopFailure
 
-- `error_type`: `rate_limit|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|server_error|max_output_tokens|unknown`
+- `error_type`: `rate_limit|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|unknown`
 - `error_message`: string
 
 ### TeammateIdle
 
 - `teammate_id`: string
-- `agent_type`: string
+- `teammate_name`: string
 
 ### Stop
 
-- `turn_count`: number
-- `message`: string (Claude's final message)
+- `assistant_message`: string (Claude's final message)
 
 ### SessionEnd
 
@@ -278,7 +280,7 @@
 - `additionalContext`: string (optional)
 - `sessionTitle`: string (UserPromptSubmit only, optional)
 
-### PostToolUse / PostToolBatch / Stop / TaskCreated / TaskCompleted
+### PostToolUse / PostToolBatch / Stop / TaskCreated / TaskCompleted / PreCompact
 
 - `decision`: `"block"` (optional)
 - `reason`: string
