@@ -1,7 +1,7 @@
 # Codex CLI Hooks Specification
 
 > Source: https://developers.openai.com/codex/config-reference
-> Snapshot: 2026-04-27
+> Snapshot: 2026-06-09
 
 ## Config Location
 
@@ -18,11 +18,11 @@ Admin-enforced hook settings in `requirements.toml`:
 
 ## Hooks Feature Status
 
-**Under development; disabled by default.**
+**Gated behind feature flag; disabled by default.**
 
 ```toml
 [features]
-codex_hooks = true  # Enable lifecycle hooks
+hooks = true  # Enable lifecycle hooks
 ```
 
 ## Hooks Config Schema
@@ -47,15 +47,19 @@ Hooks can be defined inline in `config.toml` or in `.codex/hooks.json` using the
 
 Note: Only `command` hook handlers are currently executed; `prompt` and `agent` types are parsed but skipped.
 
-## Documented Hook Events (6)
+## Documented Hook Events (10)
 
 | Event | Description |
 |-------|-------------|
 | `SessionStart` | Session begins |
 | `UserPromptSubmit` | User submits a prompt |
 | `PreToolUse` | Before tool execution |
-| `PostToolUse` | After tool execution |
 | `PermissionRequest` | Permission dialog appears |
+| `PostToolUse` | After tool execution |
+| `PreCompact` | Before history compaction |
+| `PostCompact` | After history compaction |
+| `SubagentStart` | Spawned agent startup |
+| `SubagentStop` | Spawned agent shutdown |
 | `Stop` | Assistant finishes responding |
 
 ## otel-hooks Integration
