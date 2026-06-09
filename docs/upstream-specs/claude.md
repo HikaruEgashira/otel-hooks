@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-05-26
+> Snapshot: 2026-06-09
 
 ## Config Location
 
@@ -62,9 +62,10 @@
 | PermissionRequest | Yes (exit 2) | tool_name |
 | PermissionDenied | No | tool_name |
 | PostToolUse | No | tool_name |
-| PostToolUseFailure | No | tool_name |
+| PostToolUseFailure | Yes (exit 2) | tool_name |
 | PostToolBatch | Yes (exit 2) | — |
 | Notification | No | notification_type |
+| MessageDisplay | No | — |
 | SubagentStart | No | agent_type |
 | SubagentStop | Yes (exit 2) | agent_type |
 | TaskCreated | Yes (exit 2) | — |
@@ -182,12 +183,13 @@
 
 ### CwdChanged
 
-- `previous_cwd`: string
+- `old_cwd`: string
 - `new_cwd`: string
 
 ### FileChanged
 
 - `file_path`: string
+- `change_type`: `created|modified|deleted`
 - `file_size`: number
 - `modification_time`: number (Unix seconds)
 
@@ -236,6 +238,10 @@
 
 - `teammate_id`: string
 - `teammate_name`: string
+
+### MessageDisplay
+
+- `text`: string (content being displayed to user)
 
 ### Stop
 
@@ -298,6 +304,10 @@
 ### WorktreeCreate
 
 - `hookSpecificOutput.worktreePath`: string (absolute path)
+
+### MessageDisplay
+
+- `hookSpecificOutput.displayContent`: string (modified display text)
 
 ### Elicitation / ElicitationResult
 

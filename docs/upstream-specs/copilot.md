@@ -1,16 +1,21 @@
 # GitHub Copilot Hooks Specification
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-05-26
+> Snapshot: 2026-06-09
 
 ## Config Location
 
+Hooks can be defined in dedicated hook files or inline within settings files:
+
 | Scope | Path |
 |-------|------|
-| Project (repository) | `.github/hooks/<name>.json` |
-| User (CLI) | `~/.copilot/hooks/` |
+| Project (repository) — dedicated file | `.github/hooks/<name>.json` |
+| Project (repository) — inline | `.github/copilot/settings.json` or `.github/copilot/settings.local.json` (under `hooks` key) |
+| User (CLI) — dedicated file | `~/.copilot/hooks/` |
+| User (CLI) — inline | `~/.copilot/settings.json` (under `hooks` key) |
+| Plugin-contributed | `hooks.json` (provided by plugin) |
 
-Cloud Agent: repository only (`.github/hooks/*.json`).
+Cloud Agent: repository files only (`.github/hooks/*.json` and `.github/copilot/settings.json`).
 Cloud agents run in a Linux sandbox; only `bash` and `command` fields honored; network restricted.
 
 ## Config Schema
@@ -153,7 +158,7 @@ Optional regex patterns supported for: `notification`, `permissionRequest`, `pre
     "name": "string",
     "stack": "string (optional)"
   },
-  "errorContext": "string",
+  "errorContext": "model_call|tool_execution|system|user_input",
   "recoverable": "boolean"
 }
 ```
@@ -278,6 +283,10 @@ Note: only `deny` is processed.
 | 2 | Warning — stderr surfaced but execution continues |
 | Other | Logged failure — execution continues |
 
+## Supported Tool Names (for `preToolUse` matcher)
+
+`ask_user`, `bash`, `create`, `edit`, `glob`, `grep`, `powershell`, `task`, `view`, `web_fetch`
+
 ## Constraints
 
 - Default timeout: 30 seconds
@@ -285,3 +294,4 @@ Note: only `deny` is processed.
 - Scripts read JSON from stdin
 - `disableAllHooks: true` disables all hooks in a file
 - `transcriptPath` now included in `agentStop`, `subagentStart`, `subagentStop`, `preCompact`
+- `preToolUse` is **fail-closed**: crashes, non-zero exits (other than 2), and timeouts all deny the tool call

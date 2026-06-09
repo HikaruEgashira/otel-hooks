@@ -258,6 +258,19 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source, "claude")
         self.assertEqual(event.type, EventType.SESSION_START)
 
+    def test_parse_hook_event_for_claude_message_display(self) -> None:
+        """MessageDisplay maps to SESSION_END (new Claude Code event, 2026-06-09 spec)."""
+        payload = {
+            "source_tool": "claude",
+            "hook_event_name": "MessageDisplay",
+            "session_id": "s1",
+            "text": "Hello from Claude",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "claude")
+        self.assertEqual(event.type, EventType.SESSION_END)
+
     def test_parse_hook_event_for_kiro_with_session_id(self) -> None:
         """Kiro payloads now include session_id in common fields (2026-05-04 spec update)."""
         payload = {

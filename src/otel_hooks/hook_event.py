@@ -66,6 +66,8 @@ _METRIC_EVENT_MAP: dict[str, EventType] = {
     "ErrorOccurred": EventType.SESSION_END,
     "agentSpawn": EventType.SESSION_START,
     "AgentSpawn": EventType.SESSION_START,
+    # Claude Code new events (2026-06-09 spec sync)
+    "MessageDisplay": EventType.SESSION_END,
     # Copilot new events (2026-05-18 spec sync)
     "agentStop": EventType.SESSION_END,
     "AgentStop": EventType.SESSION_END,
