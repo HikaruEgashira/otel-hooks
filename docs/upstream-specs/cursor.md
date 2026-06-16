@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-05-26
+> Snapshot: 2026-06-16
 
 ## Config Location
 
@@ -482,11 +482,19 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 | `CURSOR_CODE_REMOTE` | For remote workspaces | `"true"` if remote |
 | `CLAUDE_PROJECT_DIR` | Yes | Alias for compatibility |
 
+## Cloud Agent Support
+
+Cloud agents execute command-based hooks from `.cursor/hooks.json` only. User-level hooks are unavailable to cloud agents.
+
+**Supported in cloud agents**: `beforeShellExecution`, `afterShellExecution`, `beforeReadFile`, `afterFileEdit`, `preToolUse`, `postToolUse`, `postToolUseFailure`, `subagentStart`, `subagentStop`, `preCompact`
+
+**Not supported in cloud agents**: `sessionStart`, `sessionEnd`, `beforeSubmitPrompt`, `beforeTabFileRead`, `afterTabFileEdit`, `workspaceOpen`, `beforeMCPExecution`, `afterMCPExecution`, `afterAgentResponse`, `afterAgentThought`, `stop`
+
+Team/enterprise hooks are also unavailable in cloud agents.
+
 ## Constraints
 
 - `failClosed: true` blocks action on hook failure (crash, timeout, invalid JSON); default is fail-open
 - `loop_limit` (default 5) caps auto-followups from `stop` and `subagentStop`; set `null` to disable
 - Cursor watches hooks.json and auto-reloads on save
-- Cloud agents execute project hooks from `.cursor/hooks.json`
-- Team/enterprise hooks not yet executed in cloud agents
 - Claude Code compatible: exit code 2 = block, Claude-format hooks loaded via Third Party Hooks
