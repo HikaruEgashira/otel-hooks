@@ -49,7 +49,7 @@
 - `prompt` — LLM prompt (`prompt`, `model`)
 - `agent` — agent invocation (`prompt`, `model`) [experimental]
 
-## Hook Events (31 total)
+## Hook Events (30 total)
 
 | Event | Blockable | Matcher Target |
 |-------|-----------|----------------|
