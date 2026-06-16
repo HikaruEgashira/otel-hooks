@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-06-09
+> Snapshot: 2026-06-16
 
 ## Config Location
 
@@ -108,6 +108,7 @@
 - `source`: `startup|resume|clear|compact`
 - `model`: string
 - `agent_type`: string (optional)
+- `session_title`: string (optional)
 
 ### Setup
 
@@ -265,6 +266,14 @@
 
 ## Per-Event Output
 
+### SessionStart
+
+- `additionalContext`: string (injected before first prompt)
+- `initialUserMessage`: string (optional, overrides initial user message)
+- `sessionTitle`: string (optional, sets session title)
+- `watchPaths`: string[] (optional, paths to monitor for FileChanged events)
+- `reloadSkills`: boolean (optional)
+
 ### PreToolUse
 
 ```json
@@ -286,7 +295,14 @@
 - `additionalContext`: string (optional)
 - `sessionTitle`: string (UserPromptSubmit only, optional)
 
-### PostToolUse / PostToolBatch / Stop / TaskCreated / TaskCompleted / PreCompact
+### PostToolUse
+
+- `decision`: `"block"` (optional)
+- `reason`: string
+- `hookSpecificOutput.updatedToolOutput`: string (optional, replaces tool output seen by Claude)
+- `hookSpecificOutput.additionalContext`: string (optional, appended context for Claude)
+
+### PostToolBatch / Stop / TaskCreated / TaskCompleted / PreCompact
 
 - `decision`: `"block"` (optional)
 - `reason`: string

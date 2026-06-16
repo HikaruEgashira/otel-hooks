@@ -1,7 +1,7 @@
 # GitHub Copilot Hooks Specification
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-06-09
+> Snapshot: 2026-06-16
 
 ## Config Location
 
@@ -9,14 +9,21 @@ Hooks can be defined in dedicated hook files or inline within settings files:
 
 | Scope | Path |
 |-------|------|
+| Policy (Linux/macOS) | `/etc/github-copilot/policy.d/*.json` |
+| Policy (Windows) | `C:\ProgramData\GitHub\Copilot\policy.d\*.json` |
+| Policy (Windows Registry) | `HKLM\Software\Policies\GitHub\Copilot` (REG_SZ values) |
 | Project (repository) — dedicated file | `.github/hooks/<name>.json` |
 | Project (repository) — inline | `.github/copilot/settings.json` or `.github/copilot/settings.local.json` (under `hooks` key) |
 | User (CLI) — dedicated file | `~/.copilot/hooks/` |
 | User (CLI) — inline | `~/.copilot/settings.json` (under `hooks` key) |
 | Plugin-contributed | `hooks.json` (provided by plugin) |
 
-Cloud Agent: repository files only (`.github/hooks/*.json` and `.github/copilot/settings.json`).
-Cloud agents run in a Linux sandbox; only `bash` and `command` fields honored; network restricted.
+Load order: Policy → User → Project → Plugins. Hooks from all sources combine.
+
+Cloud Agent: only `.github/hooks/*.json` files loaded; policy, user-level, and plugin hooks unavailable.
+Cloud agents run in a Linux sandbox; only `bash` field honored (not `powershell`); network is restricted.
+
+Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must be root-owned and not group/world-writable.
 
 ## Config Schema
 
@@ -46,6 +53,15 @@ Cloud agents run in a Linux sandbox; only `bash` and `command` fields honored; n
 - `command` — shell script; `bash` (Linux/macOS), `powershell` (Windows), or cross-platform `command`
 - `http` — POST JSON payload; fields: `url`, `headers`, `allowedEnvVars`, `timeoutSec`
 - `prompt` — auto-submit text; fields: `prompt`
+
+**Progress Messages** (command hooks): Hooks may emit transient status updates to stdout before the final JSON output:
+
+```json
+{"type": "progress", "message": "Checking policy..."}
+{"type": "progress", "message": "Routing...", "temporary": true}
+```
+
+Lines with `"type": "progress"` are consumed and displayed as status; they are excluded from hook output parsing.
 
 ### Matcher Filtering
 
@@ -275,6 +291,14 @@ Note: only `deny` is processed.
 }
 ```
 
+### notification
+
+```json
+{
+  "additionalContext": "string (optional, injected as user message)"
+}
+```
+
 ## Exit Codes (command hooks)
 
 | Code | Meaning |
@@ -285,7 +309,35 @@ Note: only `deny` is processed.
 
 ## Supported Tool Names (for `preToolUse` matcher)
 
-`ask_user`, `bash`, `create`, `edit`, `glob`, `grep`, `powershell`, `task`, `view`, `web_fetch`
+`ask_user`, `bash`, `create`, `edit`, `glob`, `grep`, `powershell`, `task`, `view`, `web_fetch`, `rg`, `str_replace_editor`, `apply_patch`, `web_search`, `update_todo`
+
+### Claude Tool Name Mappings (PascalCase matchers)
+
+| Runtime name | Claude name |
+|---|---|
+| `bash`, `powershell` | `Bash` |
+| `view` | `Read` |
+| `create` | `Write` |
+| `edit`, `str_replace_editor`, `apply_patch` | `Edit` |
+| `grep`, `rg` | `Grep` |
+| `glob` | `Glob` |
+| `web_fetch` | `WebFetch` |
+| `web_search` | `WebSearch` |
+| `ask_user` | `AskUserQuestion` |
+| `update_todo` | `TodoWrite` |
+| `task` | `Agent` (`Task` also accepted) |
+
+## Cloud Agent Execution Environment
+
+| Property | Value |
+|----------|-------|
+| OS | Linux; only `bash` field honored |
+| Working directory | `/workspace` (repo) or `/root` |
+| Filesystem | Ephemeral; discarded when job ends |
+| Network | Restricted; only GitHub/Copilot reachable |
+| Environment | `GITHUB_COPILOT_API_TOKEN`, `GITHUB_COPILOT_GIT_TOKEN`, `COPILOT_AGENT_PROMPT`, `HOME=/root` set; `GITHUB_TOKEN` not set |
+| Interactivity | Non-interactive; all tool permissions pre-granted |
+| Config | Only `.github/hooks/*.json` loaded |
 
 ## Constraints
 

@@ -1,7 +1,7 @@
 # Gemini CLI Hooks Specification
 
 > Source: https://geminicli.com/docs/hooks/
-> Snapshot: 2026-04-27
+> Snapshot: 2026-06-16
 
 ## Config Location
 
@@ -84,3 +84,13 @@ Precedence: Project > Global > System > Extensions
 - stdin/stdout with strict JSON protocol
 - No plain text to stdout other than final JSON object
 - Use stderr exclusively for debugging
+
+## CLI Management Commands
+
+- `/hooks panel` — display all configured hooks
+- `/hooks enable-all` / `/hooks disable-all` — toggle all hooks
+- `/hooks enable <name>` / `/hooks disable <name>` — toggle individual hooks by name
+
+## Security Notes
+
+Project-level hooks undergo fingerprinting; changed hook commands trigger an untrusted warning before execution. "Hooks execute arbitrary code with your user privileges" when configured.
