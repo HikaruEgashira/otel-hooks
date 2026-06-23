@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-06-16
+> Snapshot: 2026-06-23
 
 ## Config Location
 
@@ -99,6 +99,8 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "conversation_id": "string",
   "generation_id": "string",
   "model": "string",
+  "model_id": "string (optional)",
+  "model_params": [{"id": "string", "value": "string"}],
   "hook_event_name": "string",
   "cursor_version": "string",
   "workspace_roots": ["string"],

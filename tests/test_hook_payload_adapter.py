@@ -271,6 +271,20 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source, "claude")
         self.assertEqual(event.type, EventType.SESSION_END)
 
+    def test_parse_hook_event_for_copilot_pre_tool_use_failure(self) -> None:
+        """preToolUseFailure maps to TOOL_END (new Copilot event, 2026-06-23 spec)."""
+        payload = {
+            "source_tool": "copilot",
+            "hook_event_name": "preToolUseFailure",
+            "sessionId": "cp-5",
+            "toolName": "bash",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.TOOL_END)
+
     def test_parse_hook_event_for_kiro_with_session_id(self) -> None:
         """Kiro payloads now include session_id in common fields (2026-05-04 spec update)."""
         payload = {

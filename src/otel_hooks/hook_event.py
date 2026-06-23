@@ -77,6 +77,9 @@ _METRIC_EVENT_MAP: dict[str, EventType] = {
     "PermissionRequest": EventType.TOOL_START,
     "postToolUseFailure": EventType.TOOL_END,
     "PostToolUseFailure": EventType.TOOL_END,
+    # Copilot: fires on tool execution error before post-use (2026-06-23 spec sync)
+    "preToolUseFailure": EventType.TOOL_END,
+    "PreToolUseFailure": EventType.TOOL_END,
     "preCompact": EventType.SESSION_END,
     "PreCompact": EventType.SESSION_END,
     "subagentStart": EventType.SESSION_START,

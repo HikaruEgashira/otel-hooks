@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-06-16
+> Snapshot: 2026-06-23
 
 ## Config Location
 
@@ -61,7 +61,7 @@
 | PreToolUse | Yes (exit 2) | tool_name |
 | PermissionRequest | Yes (exit 2) | tool_name |
 | PermissionDenied | No | tool_name |
-| PostToolUse | No | tool_name |
+| PostToolUse | Yes (exit 2) | tool_name |
 | PostToolUseFailure | Yes (exit 2) | tool_name |
 | PostToolBatch | Yes (exit 2) | — |
 | Notification | No | notification_type |
@@ -71,7 +71,7 @@
 | TaskCreated | Yes (exit 2) | — |
 | TaskCompleted | Yes (exit 2) | — |
 | Stop | Yes (exit 2) | — |
-| StopFailure | No | error_type |
+| StopFailure | No | error_type: `rate_limit\|overloaded\|authentication_failed\|...` |
 | TeammateIdle | Yes (exit 2) | — |
 | ConfigChange | Yes (exit 2) | source |
 | CwdChanged | No | — |
@@ -232,7 +232,7 @@
 
 ### StopFailure
 
-- `error_type`: `rate_limit|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|unknown`
+- `error_type`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|unknown`
 - `error_message`: string
 
 ### TeammateIdle
