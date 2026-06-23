@@ -285,6 +285,20 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source, "copilot")
         self.assertEqual(event.type, EventType.TOOL_END)
 
+    def test_parse_hook_event_for_copilot_pre_tool_use_failure_pascal_case(self) -> None:
+        """PreToolUseFailure (PascalCase alias) also maps to TOOL_END."""
+        payload = {
+            "source_tool": "copilot",
+            "hook_event_name": "PreToolUseFailure",
+            "sessionId": "cp-5b",
+            "toolName": "bash",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.TOOL_END)
+
     def test_parse_hook_event_for_kiro_with_session_id(self) -> None:
         """Kiro payloads now include session_id in common fields (2026-05-04 spec update)."""
         payload = {
