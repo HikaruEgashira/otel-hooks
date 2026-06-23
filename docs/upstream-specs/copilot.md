@@ -1,7 +1,7 @@
 # GitHub Copilot Hooks Specification
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-06-16
+> Snapshot: 2026-06-23
 
 ## Config Location
 
@@ -65,9 +65,9 @@ Lines with `"type": "progress"` are consumed and displayed as status; they are e
 
 ### Matcher Filtering
 
-Optional regex patterns supported for: `notification`, `permissionRequest`, `preCompact`, `preToolUse`, `subagentStart`
+Optional regex patterns supported for: `notification`, `permissionRequest`, `postToolUse`, `preCompact`, `preToolUse`, `subagentStart`
 
-## Hook Events (13 total)
+## Hook Events (14 total)
 
 | Event | Has Output | Description |
 |-------|-----------|-------------|
@@ -75,8 +75,9 @@ Optional regex patterns supported for: `notification`, `permissionRequest`, `pre
 | sessionEnd | No | Session completes or terminates |
 | userPromptSubmitted | No | User submits a prompt |
 | preToolUse | Yes | Before tool execution (can deny) |
-| postToolUse | No | After tool execution |
+| postToolUse | Yes | After tool execution (can modify result) |
 | postToolUseFailure | No | After a tool completes with a failure |
+| preToolUseFailure | Yes | Tool execution error (can provide recovery guidance) |
 | errorOccurred | No | Error during execution |
 | agentStop | Yes | Main agent finishes a turn (can block) |
 | notification | No | Async system notification (CLI only) |

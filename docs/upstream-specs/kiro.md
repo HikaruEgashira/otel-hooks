@@ -1,7 +1,7 @@
 # Kiro Hooks Specification
 
 > Source: https://kiro.dev/docs/cli/hooks/
-> Snapshot: 2026-05-11
+> Snapshot: 2026-06-23
 
 ## Config Location
 
@@ -73,10 +73,23 @@ Additional fields:
 
 Note: `agentSpawn` hooks are never cached.
 
+## Stop Hook Output
+
+The `stop` hook can block agent termination by returning JSON on exit 0:
+
+```json
+{
+  "decision": "block",
+  "reason": "explanation becomes new user message"
+}
+```
+
+When `decision` is `"block"`, the agent continues with `reason` injected as a new user message.
+
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success — stdout captured (added to context for agentSpawn/userPromptSubmit) |
+| 0 | Success — stdout captured; JSON parsed for decision (agentSpawn/userPromptSubmit get stdout as context) |
 | 2 | Block execution (preToolUse only) — stderr returned to LLM |
 | Other | Warning — stderr shown to user |
