@@ -313,6 +313,67 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.type, EventType.PROMPT_SUBMIT)
         self.assertEqual(event.session_id, "kiro-sess-1")
 
+    def test_parse_hook_event_for_cline_sdk_tool_call_before(self) -> None:
+        """Cline SDK tool_call_before maps to TOOL_START (2026-06-30 SDK hooks spec)."""
+        payload = {
+            "source_tool": "cline",
+            "hook_event_name": "tool_call_before",
+            "session_id": "cline-sdk-1",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "cline")
+        self.assertEqual(event.type, EventType.TOOL_START)
+        self.assertEqual(event.session_id, "cline-sdk-1")
+
+    def test_parse_hook_event_for_cline_sdk_tool_call_after(self) -> None:
+        """Cline SDK tool_call_after maps to TOOL_END (2026-06-30 SDK hooks spec)."""
+        payload = {
+            "source_tool": "cline",
+            "hook_event_name": "tool_call_after",
+            "session_id": "cline-sdk-2",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "cline")
+        self.assertEqual(event.type, EventType.TOOL_END)
+
+    def test_parse_hook_event_for_cline_sdk_session_start(self) -> None:
+        """Cline SDK session_start maps to SESSION_START (2026-06-30 SDK hooks spec)."""
+        payload = {
+            "source_tool": "cline",
+            "hook_event_name": "session_start",
+            "session_id": "cline-sdk-3",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "cline")
+        self.assertEqual(event.type, EventType.SESSION_START)
+
+    def test_parse_hook_event_for_cline_sdk_run_end(self) -> None:
+        """Cline SDK run_end maps to SESSION_END (2026-06-30 SDK hooks spec)."""
+        payload = {
+            "source_tool": "cline",
+            "hook_event_name": "run_end",
+            "session_id": "cline-sdk-4",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "cline")
+        self.assertEqual(event.type, EventType.SESSION_END)
+
+    def test_parse_hook_event_for_cline_legacy_task_id_still_works(self) -> None:
+        """Legacy Cline extension format (taskId) continues to work after SDK migration."""
+        payload = {"taskId": "t99", "clineVersion": "3.36"}
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "cline")
+        self.assertEqual(event.session_id, "t99")
+
 
 if __name__ == "__main__":
     unittest.main()

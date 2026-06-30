@@ -1,7 +1,7 @@
 # Kiro Hooks Specification
 
 > Source: https://kiro.dev/docs/cli/hooks/
-> Snapshot: 2026-06-23
+> Snapshot: 2026-06-30
 
 ## Config Location
 
@@ -35,6 +35,10 @@
 ### userPromptSubmit
 
 - `prompt`: string (user's input text)
+
+### stop
+
+- `assistant_response`: string (the assistant's last message text)
 
 ## Tool-Related Events (preToolUse, postToolUse)
 

@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-06-23
+> Snapshot: 2026-06-30
 
 ## Config Location
 
@@ -126,6 +126,7 @@
 ### UserPromptSubmit
 
 - `prompt`: string
+- `is_continuation`: boolean (optional; true when continuing an interrupted session)
 
 ### UserPromptExpansion
 
@@ -246,7 +247,8 @@
 
 ### Stop
 
-- `assistant_message`: string (Claude's final message)
+- `response`: string (Claude's full response text; formerly `assistant_message`)
+- `stop_reason`: string (e.g. `end_turn`)
 
 ### SessionEnd
 
