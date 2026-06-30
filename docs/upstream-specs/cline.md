@@ -1,149 +1,111 @@
 # Cline Hooks Specification
 
-> Source: https://docs.cline.bot/customization/hooks
-> Snapshot: 2026-04-27
+> Source: https://docs.cline.bot/sdk/hooks
+> (Original URL https://docs.cline.bot/customization/hooks now redirects to the SDK Hooks page)
+> Snapshot: 2026-06-30
 
-## Config Location
+## Migration Note
 
-| Scope | Path |
-|-------|------|
-| Global | `~/Documents/Cline/Hooks/` |
-| Project | `.clinerules/hooks/` |
+As of 2026-06-30, Cline has migrated from the shell-executable hook system
+(`~/Documents/Cline/Hooks/`, `.clinerules/hooks/`) to an SDK-based hook system.
+The old file-based format (8 events: TaskStart/Resume/Cancel/Complete, PreToolUse,
+PostToolUse, UserPromptSubmit, PreCompact) is superseded by the SDK hooks below.
 
-Both execute when present; global runs first.
+## SDK Plugin Structure
 
-## File Format
+Hooks are defined via the Cline SDK (TypeScript):
 
-Hooks are **executable scripts** (not JSON config):
+```typescript
+import { ClineHook } from "@cline/sdk";
 
-- macOS/Linux: extensionless executables (e.g., `PreToolUse`), `chmod +x` required
-- Windows: PowerShell scripts (e.g., `PreToolUse.ps1`)
+const hook: ClineHook = {
+  mode: "blocking",          // "blocking" | "async"
+  timeoutMs: 30000,
+  retries: 0,
+  retryDelayMs: 1000,
+  failureMode: "fail_open",  // "fail_open" | "fail_closed"
+  maxConcurrency: 1,
+  queueLimit: 100,
+};
+```
 
-## Hook Events (8 total)
+## Hook Configuration Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | string | — | `"blocking"` (waits for result) or `"async"` (fire-and-forget) |
+| `timeoutMs` | number | — | Maximum duration before timeout |
+| `retries` | number | 0 | Retry count on failure |
+| `retryDelayMs` | number | 1000 | Pause between retries (ms) |
+| `failureMode` | string | `"fail_open"` | `"fail_open"` proceeds on failure; `"fail_closed"` blocks |
+| `maxConcurrency` | number | 1 | Parallel hook executions |
+| `queueLimit` | number | 100 | Max queued hooks before dropping |
+
+## Hook Events (15 total)
+
+### Lifecycle Events
 
 | Event | Description |
 |-------|-------------|
-| TaskStart | New task initialization |
-| TaskResume | Resuming interrupted task |
-| TaskCancel | User cancels running task |
-| TaskComplete | Task finishes successfully |
-| PreToolUse | Before tool execution |
-| PostToolUse | After tool execution |
-| UserPromptSubmit | User sends message |
-| PreCompact | Before conversation history truncation |
+| `session_start` | Session initialization |
+| `session_shutdown` | Session teardown |
+| `run_start` | Run begins (logging, timers, rate limit init) |
+| `run_end` | Run ends (metrics, alerts, cleanup) |
 
-## Common Input Payload (all events)
+### Execution Events
 
-```json
-{
-  "taskId": "string",
-  "hookName": "string",
-  "clineVersion": "string",
-  "timestamp": "string (milliseconds since epoch)",
-  "workspaceRoots": ["string"],
-  "userId": "string",
-  "model": {
-    "provider": "string",
-    "slug": "string"
-  }
-}
-```
+| Event | Description |
+|-------|-------------|
+| `iteration_start` | Iteration begins within a run |
+| `iteration_end` | Iteration completes |
+| `turn_start` | LLM turn begins |
+| `turn_end` | LLM turn completes |
 
-## Per-Event Input Fields
+### Agent Events
 
-### TaskStart / TaskResume / TaskCancel / TaskComplete
+| Event | Description |
+|-------|-------------|
+| `before_agent_start` | Before agent activates (inject context / modify prompt) |
 
-```json
-{
-  "taskStart": {
-    "taskMetadata": {
-      "taskId": "string",
-      "ulid": "string",
-      "initialTask": "string"
-    }
-  }
-}
-```
+### Tool Events
 
-(Field key matches event name in camelCase; `taskMetadata` is nested inside)
+| Event | Description |
+|-------|-------------|
+| `tool_call_before` | Before tool invocation (audit or prevent) |
+| `tool_call_after` | After tool invocation (record outcomes, side effects) |
 
-### PreToolUse
+### Error / Generic Events
 
-```json
-{
-  "preToolUse": {
-    "toolName": "string",
-    "parameters": "object"
-  }
-}
-```
+| Event | Description |
+|-------|-------------|
+| `stop_error` | Execution stopped due to error |
+| `error` | Exception notification |
+| `input` | Input processing event |
+| `runtime_event` | Generic runtime notification |
 
-### PostToolUse
+## Common Hook Scenarios
 
-```json
-{
-  "postToolUse": {
-    "toolName": "string",
-    "parameters": "object",
-    "result": "string",
-    "success": "boolean",
-    "executionTimeMs": "number"
-  }
-}
-```
+- **`before_agent_start`**: Inject context or modify prompt/messages
+- **`run_start`**: Logging, timers, rate limit initialization
+- **`tool_call_before`**: Audit or prevent tool invocations
+- **`tool_call_after`**: Record outcomes, activate side operations
+- **`run_end`**: Metrics collection, alert dispatch, resource cleanup
+- **`error`**: Exception reporting mechanisms
 
-### UserPromptSubmit
+## Integration Notes
 
-```json
-{
-  "userPromptSubmit": {
-    "prompt": "string",
-    "attachments": ["string"]
-  }
-}
-```
+otel-hooks integration:
 
-### PreCompact
+- New Cline SDK events are mapped in `hook_event.py`
+- Source detection via `source_tool: "cline"` hint or legacy `taskId` field
+- For new SDK-based payloads without `taskId`, pass `--tool cline` flag or
+  set `source_tool: "cline"` in the payload
 
-```json
-{
-  "preCompact": {
-    "taskId": "string",
-    "ulid": "string",
-    "contextSize": "number",
-    "compactionStrategy": "string",
-    "tokensIn": "number",
-    "tokensOut": "number",
-    "tokensInCache": "number",
-    "tokensOutCache": "number"
-  }
-}
-```
+## Legacy Format (pre-2026-06-30, for reference)
 
-## Output Payload (all events)
+Old config locations: `~/Documents/Cline/Hooks/` (global), `.clinerules/hooks/` (project)
 
-```json
-{
-  "cancel": false,
-  "contextModification": "string (optional)",
-  "errorMessage": "string (optional)"
-}
-```
+Old events: `TaskStart`, `TaskResume`, `TaskCancel`, `TaskComplete`, `PreToolUse`,
+`PostToolUse`, `UserPromptSubmit`, `PreCompact`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `cancel` | boolean | Stops operation if true |
-| `contextModification` | string | Text injected into conversation |
-| `errorMessage` | string | User-facing error message |
-
-## Communication
-
-- Input: JSON via stdin
-- Output: single-line JSON via stdout
-- Debug: stderr
-
-## Constraints
-
-- If either global or project hook returns `cancel: true`, operation stops
-- PostToolUse cannot undo already-executed tools
-- Output must be valid single-line JSON
+Old detection field: `taskId` in payload
