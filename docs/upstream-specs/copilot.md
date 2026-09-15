@@ -1,7 +1,7 @@
 # GitHub Copilot Hooks Specification
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-08-11
+> Snapshot: 2026-09-15
 
 ## Config Location
 
@@ -14,8 +14,9 @@ Hooks can be defined in dedicated hook files or inline within settings files:
 | Policy (Windows Registry) | `HKLM\Software\Policies\GitHub\Copilot` (REG_SZ values) |
 | Project (repository) — dedicated file | `.github/hooks/<name>.json` |
 | Project (repository) — inline | `.github/copilot/settings.json` or `.github/copilot/settings.local.json` (under `hooks` key) |
-| User (CLI) — dedicated file | `~/.copilot/hooks/` |
+| User (CLI) — dedicated file | `~/.copilot/hooks/` (macOS/Linux); `%USERPROFILE%\.copilot\hooks\` (Windows; added 2026-09-15) |
 | User (CLI) — inline | `~/.copilot/settings.json` (under `hooks` key) |
+| Project (inline, Claude compat) | `.claude/settings.json` or `.claude/settings.local.json` (under `hooks` key; added 2026-09-15) |
 | Plugin-contributed | `hooks.json` (provided by plugin) |
 
 Load order: Policy → User → Project → Plugins. Hooks from all sources combine.
@@ -37,6 +38,8 @@ Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must 
         "bash": "string (script path)",
         "powershell": "string (script path)",
         "command": "string (cross-platform path)",
+        "exec": "string (executable path; alternative to command/bash/powershell; added 2026-09-15)",
+        "args": ["array", "of", "strings (argument vector for exec; added 2026-09-15)"],
         "cwd": "string (optional)",
         "env": { "<key>": "<value>" },
         "timeoutSec": 30,

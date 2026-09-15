@@ -1,7 +1,7 @@
 # Kiro Hooks Specification
 
 > Source: https://kiro.dev/docs/cli/hooks/
-> Snapshot: 2026-07-28
+> Snapshot: 2026-09-15
 
 ## Config Location
 
@@ -29,7 +29,8 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
         "prompt": "string (agent type)"
       },
       "timeout": 60,
-      "enabled": true
+      "enabled": true,
+      "confirm": "object (optional; adds user confirmation prompt before Stop trigger actions; added 2026-09-15)"
     }
   ]
 }
@@ -48,6 +49,7 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
 | `timeout_ms` | integer (ms) | No | 30000 | Hook execution timeout (alternative to `timeout`; added 2026-07-28) |
 | `cache_ttl_seconds` | integer | No | 0 | Cache successful hook results; 0 = no caching (added 2026-07-28) |
 | `enabled` | boolean | No | true | Toggle hook without deletion |
+| `confirm` | object | No | — | Adds user confirmation prompt before executing Stop trigger actions (added 2026-09-15) |
 
 ### Action Types
 

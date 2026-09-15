@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-08-11
+> Snapshot: 2026-09-15
 
 ## Config Location
 
@@ -25,6 +25,7 @@
           {
             "type": "command",
             "command": "string",
+            "args": ["array", "of", "strings (exec form — no shell when present)"],
             "async": false,
             "asyncRewake": false,
             "shell": "bash",
@@ -37,7 +38,10 @@
       }
     ]
   },
-  "disableAllHooks": false
+  "disableAllHooks": false,
+  "allowedHttpHookUrls": ["string array of allowed URL patterns"],
+  "httpHookAllowedEnvVars": ["string array of env var names allowed in HTTP hook headers"],
+  "allowManagedHooksOnly": false
 }
 ```
 
@@ -49,7 +53,7 @@
 - `prompt` — LLM prompt (`prompt`, `model`)
 - `agent` — agent invocation (`prompt`, `model`) [experimental]
 
-## Hook Events (31 total)
+## Hook Events (33 total)
 
 | Event | Blockable | Matcher Target |
 |-------|-----------|----------------|
@@ -81,6 +85,8 @@
 | WorktreeRemove | No | — |
 | PreCompact | Yes (exit 2) | trigger: `manual\|auto` |
 | PostCompact | No | trigger: `manual\|auto` |
+| PreModelSwitch | Yes (exit 2) | canonical model name (e.g. `claude-opus-5`) |
+| PostModelSwitch | No | canonical model name |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
 | SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
@@ -93,6 +99,7 @@
   "prompt_id": "uuid",
   "transcript_path": "string",
   "cwd": "string",
+  "scratchpad_dir": "string (path to session scratchpad; absent when unavailable)",
   "permission_mode": "default|plan|acceptEdits|auto|dontAsk|bypassPermissions",
   "hook_event_name": "string",
   "effort": {
@@ -239,7 +246,7 @@
 
 ### StopFailure
 
-- `error_type`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|unknown`
+- `error_type`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown`
 - `error_message`: string
 
 ### TeammateIdle
@@ -254,6 +261,16 @@
 ### Stop
 
 - `last_assistant_message`: string (Claude's full response text; formerly `response`, before that `assistant_message`)
+
+### PreModelSwitch
+
+- `from_model`: string (current model canonical name)
+- `to_model`: string (requested model canonical name)
+
+### PostModelSwitch
+
+- `from_model`: string (previous model canonical name)
+- `to_model`: string (new active model canonical name)
 
 ### SessionEnd
 

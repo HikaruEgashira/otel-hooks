@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-07-14
+> Snapshot: 2026-09-15
 
 ## Config Location
 
@@ -281,7 +281,8 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 {
   "tool_name": "string",
   "tool_input": "string (JSON)",
-  "url": "string (optional)",
+  "mcp_server_name": "string (added 2026-09-15)",
+  "mcp_server_url": "string (optional; formerly 'url')",
   "command": "string (optional)"
 }
 // Output
@@ -299,6 +300,8 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 {
   "tool_name": "string",
   "tool_input": "string",
+  "mcp_server_name": "string (added 2026-09-15)",
+  "mcp_server_url": "string (optional; added 2026-09-15)",
   "result_json": "string",
   "duration": "number (ms)"
 }
