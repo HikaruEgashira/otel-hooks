@@ -1,7 +1,7 @@
 # GitHub Copilot Hooks Specification
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-08-11
+> Snapshot: 2026-09-22
 
 ## Config Location
 
@@ -37,6 +37,8 @@ Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must 
         "bash": "string (script path)",
         "powershell": "string (script path)",
         "command": "string (cross-platform path)",
+        "exec": "string (executable name; used with args for exec form)",
+        "args": ["string", "..."],
         "cwd": "string (optional)",
         "env": { "<key>": "<value>" },
         "timeoutSec": 30,

@@ -110,6 +110,11 @@ _METRIC_EVENT_MAP: dict[str, EventType] = {
     "PostFileCreate": EventType.FILE_WRITE,
     "PostFileSave": EventType.FILE_WRITE,
     "PostFileDelete": EventType.FILE_WRITE,
+    # Claude Code new events (2026-09-22 spec sync)
+    "PreModelSwitch": EventType.SESSION_START,
+    "PostModelSwitch": EventType.SESSION_END,
+    # Codex new events (2026-09-22 spec sync)
+    "Interrupt": EventType.SESSION_END,
 }
 
 

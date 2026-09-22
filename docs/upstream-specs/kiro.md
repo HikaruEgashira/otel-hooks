@@ -1,7 +1,7 @@
 # Kiro Hooks Specification
 
-> Source: https://kiro.dev/docs/cli/hooks/
-> Snapshot: 2026-07-28
+> Source: https://kiro.dev/docs/hooks/ (formerly https://kiro.dev/docs/cli/hooks/)
+> Snapshot: 2026-09-22
 
 ## Config Location
 
@@ -29,7 +29,11 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
         "prompt": "string (agent type)"
       },
       "timeout": 60,
-      "enabled": true
+      "enabled": true,
+      "confirm": {
+        "message": "string (optional, prompt shown before execution)",
+        "default": "allow|deny (optional)"
+      }
     }
   ]
 }
@@ -48,6 +52,7 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
 | `timeout_ms` | integer (ms) | No | 30000 | Hook execution timeout (alternative to `timeout`; added 2026-07-28) |
 | `cache_ttl_seconds` | integer | No | 0 | Cache successful hook results; 0 = no caching (added 2026-07-28) |
 | `enabled` | boolean | No | true | Toggle hook without deletion |
+| `confirm` | object | No | — | Confirmation prompt config before execution (added 2026-09-22) |
 
 ### Action Types
 
@@ -56,19 +61,19 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
 
 ## Hook Events (11 total)
 
-| Trigger | Activation | Matcher Type | Blockable |
-|---------|------------|--------------|-----------|
-| `AgentSpawn` | Agent activates (added 2026-07-28) | N/A | No |
-| `SessionStart` | Session begins | N/A | No |
-| `UserPromptSubmit` | User submits prompt | N/A | Yes |
-| `Stop` | Agent completes turn | N/A | Yes (block decision via `{"decision": "block", "reason": "..."}`) |
-| `PreToolUse` | Before tool executes | Tool name (regex) | Yes |
-| `PostToolUse` | After tool executes | Tool name (regex) | No |
-| `PreTaskExec` | Before spec task starts | N/A | Yes |
-| `PostTaskExec` | After spec task finishes | N/A | No |
-| `PostFileCreate` | File created by agent | File path (regex) | No |
-| `PostFileSave` | File saved by agent | File path (regex) | No |
-| `PostFileDelete` | File deleted by agent | File path (regex) | No |
+| Trigger | Activation | Matcher Type | Blockable | Platforms |
+|---------|------------|--------------|-----------|-----------|
+| `AgentSpawn` | Agent activates (added 2026-07-28) | N/A | No | CLI only |
+| `SessionStart` | Session begins | N/A | No | IDE only |
+| `UserPromptSubmit` | User submits prompt | N/A | Yes | IDE, CLI |
+| `Stop` | Agent completes turn | N/A | No | IDE, CLI |
+| `PreToolUse` | Before tool executes | Tool name (regex) | Yes | IDE, CLI |
+| `PostToolUse` | After tool executes | Tool name (regex) | No | IDE, CLI |
+| `PreTaskExec` | Before spec task starts | N/A | Yes | IDE only |
+| `PostTaskExec` | After spec task finishes | N/A | No | IDE only |
+| `PostFileCreate` | File created by agent | File path (regex) | No | IDE only |
+| `PostFileSave` | File saved by agent | File path (regex) | No | IDE only |
+| `PostFileDelete` | File deleted by agent | File path (regex) | No | IDE only |
 
 ## Common Input Fields (all events)
 
@@ -129,6 +134,8 @@ Additional fields:
 
 - `timeout` applies to command actions only (not agent actions)
 - `timeout: 0` disables the limit
-- Blocking supported for: PreToolUse, UserPromptSubmit, PreTaskExec, Stop (via JSON `{"decision": "block", "reason": "..."}` output)
+- Blocking supported for: PreToolUse, UserPromptSubmit, PreTaskExec (via exit code 2 or JSON `{"decision": "block", "reason": "..."}` output)
+- `Stop` event is non-blocking (fire-and-forget; previously documented as blockable)
 - `SessionStart` hooks are never cached
 - Matcher field filters by tool name (PreToolUse/PostToolUse) or file path (PostFileCreate/PostFileSave/PostFileDelete) using regex
+- File-triggered hooks respond only to agent-initiated changes, not manual edits

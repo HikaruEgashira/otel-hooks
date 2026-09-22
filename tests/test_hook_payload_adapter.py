@@ -464,6 +464,47 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source, "copilot")
         self.assertEqual(event.type, EventType.PROMPT_SUBMIT)
 
+    def test_parse_hook_event_for_claude_pre_model_switch(self) -> None:
+        """PreModelSwitch maps to SESSION_START (new Claude Code event, 2026-09-22 spec sync)."""
+        payload = {
+            "source_tool": "claude",
+            "hook_event_name": "PreModelSwitch",
+            "session_id": "s1",
+            "old_model": "claude-sonnet-5",
+            "new_model": "claude-opus-5",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "claude")
+        self.assertEqual(event.type, EventType.SESSION_START)
+
+    def test_parse_hook_event_for_claude_post_model_switch(self) -> None:
+        """PostModelSwitch maps to SESSION_END (new Claude Code event, 2026-09-22 spec sync)."""
+        payload = {
+            "source_tool": "claude",
+            "hook_event_name": "PostModelSwitch",
+            "session_id": "s1",
+            "old_model": "claude-sonnet-5",
+            "new_model": "claude-opus-5",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "claude")
+        self.assertEqual(event.type, EventType.SESSION_END)
+
+    def test_parse_hook_event_for_codex_interrupt(self) -> None:
+        """Interrupt maps to SESSION_END (new Codex event, 2026-09-22 spec sync)."""
+        payload = {
+            "source_tool": "codex",
+            "hook_event_name": "Interrupt",
+            "thread-id": "th2",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "codex")
+        self.assertEqual(event.type, EventType.SESSION_END)
+        self.assertEqual(event.session_id, "th2")
+
     def test_parse_hook_event_for_claude_directory_added(self) -> None:
         """DirectoryAdded maps to SESSION_END (new Claude Code event, 2026-08-04 spec sync)."""
         payload = {
