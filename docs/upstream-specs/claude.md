@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-08-11
+> Snapshot: 2026-09-22
 
 ## Config Location
 
@@ -49,7 +49,7 @@
 - `prompt` — LLM prompt (`prompt`, `model`)
 - `agent` — agent invocation (`prompt`, `model`) [experimental]
 
-## Hook Events (31 total)
+## Hook Events (33 total)
 
 | Event | Blockable | Matcher Target |
 |-------|-----------|----------------|
@@ -78,9 +78,11 @@
 | DirectoryAdded | No | addition method: `slash_command\|register_repo_root` |
 | FileChanged | No | filename (basename) |
 | WorktreeCreate | Yes (exit 2) | — |
-| WorktreeRemove | No | — |
+| WorktreeRemove | Yes (exit 2) | — |
 | PreCompact | Yes (exit 2) | trigger: `manual\|auto` |
 | PostCompact | No | trigger: `manual\|auto` |
+| PreModelSwitch | Yes (exit 2) | model name (regex) |
+| PostModelSwitch | No | model name (regex) |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
 | SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
@@ -93,6 +95,7 @@
   "prompt_id": "uuid",
   "transcript_path": "string",
   "cwd": "string",
+  "scratchpad_dir": "string (v2.1.257+)",
   "permission_mode": "default|plan|acceptEdits|auto|dontAsk|bypassPermissions",
   "hook_event_name": "string",
   "effort": {
@@ -223,6 +226,16 @@
 - `context_used`: number (PreCompact only)
 - `context_limit`: number (PreCompact only)
 
+### PreModelSwitch
+
+- `old_model`: string (current model before switch)
+- `new_model`: string (requested model)
+
+### PostModelSwitch
+
+- `old_model`: string
+- `new_model`: string (model now active)
+
 ### Elicitation
 
 - `mcp_server_name`: string
@@ -239,7 +252,7 @@
 
 ### StopFailure
 
-- `error_type`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|unknown`
+- `error_type`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown` (`cloud_credential_error` added v2.1.267+)
 - `error_message`: string
 
 ### TeammateIdle
@@ -358,10 +371,22 @@
 - `$CLAUDE_PROJECT_DIR` — project root
 - `$CLAUDE_PLUGIN_ROOT` — plugin install dir
 - `$CLAUDE_PLUGIN_DATA` — plugin data dir
+- `$CLAUDE_PLUGIN_OPTION_*` — plugin user config options (e.g. `$CLAUDE_PLUGIN_OPTION_MY_KEY`)
 - `$CLAUDE_CODE_REMOTE` — `"true"` in web environments
 - `$CLAUDE_EFFORT` — effort level (`low`, `medium`, `high`, `xhigh`, `max`)
 - `$CLAUDE_ENV_FILE` — env persist file (SessionStart, Setup, CwdChanged, FileChanged only)
 - `$CLAUDE_CODE_BRIDGE_SESSION_ID` — Remote Control session ID (v2.1.199+)
+
+## Settings Allowlists
+
+- `allowedHttpHookUrls` — array of URL globs permitted for HTTP hooks (e.g. `["http://localhost:*", "https://trusted.com/*"]`)
+- `httpHookAllowedEnvVars` — array of env var names that HTTP hooks may read (e.g. `["TOKEN", "API_KEY"]`)
+
+## Version Requirements
+
+- `prompt_id` field: v2.1.196+
+- `scratchpad_dir` field: v2.1.257+
+- `cloud_credential_error` in `StopFailure`: v2.1.267+
 
 ## Constraints
 

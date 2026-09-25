@@ -2,7 +2,7 @@
 
 > Source: https://learn.chatgpt.com/docs/config-file/config-reference
 > (Formerly https://developers.openai.com/codex/config-reference — 308 permanent redirect as of 2026-07-21)
-> Snapshot: 2026-08-04
+> Snapshot: 2026-09-22
 
 ## Config Location
 
@@ -23,8 +23,10 @@ Admin-enforced hook settings in `requirements.toml`:
 
 ```toml
 [features]
-hooks = true  # Enable lifecycle hooks
+hooks = true  # Enable lifecycle hooks (replaces deprecated features.codex_hooks alias)
 ```
+
+Note: The legacy alias `features.codex_hooks` is deprecated; use `features.hooks`.
 
 ## Hooks Config Schema
 
@@ -39,7 +41,8 @@ Hooks can be defined inline in `config.toml` or in `.codex/hooks.json` using the
         {
           "type": "command",
           "command": "string",
-          "commandWindows": "string (Windows-specific override; TOML alias: command_windows)"
+          "commandWindows": "string (Windows-specific override; TOML alias: command_windows)",
+          "async": false
         }
       ]
     }
@@ -49,11 +52,15 @@ Hooks can be defined inline in `config.toml` or in `.codex/hooks.json` using the
 
 Note: Only `command` hook handlers are currently executed; `prompt` and `agent` types are parsed but skipped.
 
+### `async` field
+
+When `async: true`, the hook runs in the background without blocking the triggering operation. Default is `false`. `SessionEnd` always runs synchronously regardless of this setting.
+
 ### Output Management
 
 The `additionalContextLimit` parameter (default: 2500 tokens) controls when oversized hook output is saved to disk with a shortened model preview. Setting to `0` passes full output directly to the model.
 
-## Documented Hook Events (11)
+## Documented Hook Events (12)
 
 | Event | Description |
 |-------|-------------|
@@ -68,6 +75,7 @@ The `additionalContextLimit` parameter (default: 2500 tokens) controls when over
 | `SubagentStart` | Spawned agent startup |
 | `SubagentStop` | Spawned agent shutdown |
 | `Stop` | Assistant finishes responding |
+| `Interrupt` | Session interrupted by user (added 2026-09-22) |
 
 ## otel-hooks Integration
 

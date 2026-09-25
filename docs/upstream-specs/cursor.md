@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-07-14
+> Snapshot: 2026-09-22
 
 ## Config Location
 
@@ -197,7 +197,10 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "duration": "number (ms)",
   "is_interrupt": "boolean"
 }
-// Output: none
+// Output
+{
+  "additional_context": "string (optional, injected as context for the model)"
+}
 ```
 
 ### subagentStart
@@ -281,8 +284,10 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 {
   "tool_name": "string",
   "tool_input": "string (JSON)",
-  "url": "string (optional)",
-  "command": "string (optional)"
+  "mcp_server_name": "string",
+  "url": "string (optional, HTTP/SSE servers)",
+  "mcp_server_url": "string (optional, alias for url)",
+  "command": "string (optional, stdio servers)"
 }
 // Output
 {
@@ -299,6 +304,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 {
   "tool_name": "string",
   "tool_input": "string",
+  "mcp_server_name": "string",
   "result_json": "string",
   "duration": "number (ms)"
 }
