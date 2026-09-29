@@ -2,7 +2,7 @@
 
 > Source: https://learn.chatgpt.com/docs/config-file/config-reference
 > (Formerly https://developers.openai.com/codex/config-reference — 308 permanent redirect as of 2026-07-21)
-> Snapshot: 2026-09-22
+> Snapshot: 2026-09-29
 
 ## Config Location
 
@@ -50,7 +50,7 @@ Hooks can be defined inline in `config.toml` or in `.codex/hooks.json` using the
 }
 ```
 
-Note: Only `command` hook handlers are currently executed; `prompt` and `agent` types are parsed but skipped.
+Note: `command` and MCP tool hook handlers are executed; `prompt` and `agent` types are parsed but skipped. (MCP tool handler field schema is not documented in the config reference.)
 
 ### `async` field
 

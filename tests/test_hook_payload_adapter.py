@@ -537,6 +537,42 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.type, EventType.SESSION_END)
         self.assertEqual(event.session_id, "cp-8")
 
+    def test_parse_hook_event_for_copilot_vscode_format_post_tool_use_failure(self) -> None:
+        """VS Code compatible (PascalCase / snake_case) Copilot payload (2026-09-29 spec sync)."""
+        payload = {
+            "hook_event_name": "PostToolUseFailure",
+            "session_id": "cp-vs-1",
+            "timestamp": "2026-09-29T00:00:00Z",
+            "cwd": "/tmp/repo",
+            "tool_name": "Bash",
+            "tool_input": {"command": "false"},
+            "error": "exit code 1",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.TOOL_END)
+        self.assertEqual(event.session_id, "cp-vs-1")
+        self.assertEqual(event.data.get("tool_name"), "Bash")
+        self.assertEqual(event.context, "file:///tmp/repo")
+
+    def test_parse_hook_event_for_copilot_vscode_format_stop_with_transcript(self) -> None:
+        """VS Code compatible Stop payload carries transcript_path (2026-09-29 spec sync)."""
+        payload = {
+            "hook_event_name": "Stop",
+            "session_id": "cp-vs-2",
+            "timestamp": "2026-09-29T00:00:00Z",
+            "cwd": "/tmp/repo",
+            "transcript_path": "/tmp/transcript.jsonl",
+            "stop_reason": "end_turn",
+            "stop_hook_active": False,
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+        self.assertEqual(event.type, EventType.SESSION_END)
+        self.assertEqual(str(event.transcript_path), "/tmp/transcript.jsonl")
+
 
 if __name__ == "__main__":
     unittest.main()

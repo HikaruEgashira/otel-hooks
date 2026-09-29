@@ -12,7 +12,7 @@
 | [codex.md](codex.md) | https://developers.openai.com/codex/config-reference | 2026-04-04 |
 | [opencode.md](opencode.md) | https://opencode.ai/docs/plugins/ | 2026-04-04 |
 | [gemini.md](gemini.md) | https://geminicli.com/docs/hooks/ | 2026-04-04 |
-| [cline.md](cline.md) | https://docs.cline.bot/customization/hooks | 2026-04-04 |
+| [cline.md](cline.md) | https://docs.cline.bot/sdk/plugins | 2026-04-04 |
 | [copilot.md](copilot.md) | https://docs.github.com/en/copilot/reference/hooks-configuration | 2026-04-04 |
 | [kiro.md](kiro.md) | https://kiro.dev/docs/cli/hooks/ | 2026-04-04 |
 
