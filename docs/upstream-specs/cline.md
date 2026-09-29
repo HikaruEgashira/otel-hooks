@@ -1,8 +1,10 @@
 # Cline Hooks Specification
 
-> Source: https://docs.cline.bot/sdk/hooks
-> (Original URL https://docs.cline.bot/customization/hooks now redirects to the SDK Hooks page)
-> Snapshot: 2026-06-30
+> Source: https://docs.cline.bot/sdk/plugins
+> (https://docs.cline.bot/customization/hooks is now a stub pointing to SDK Plugins;
+> https://docs.cline.bot/sdk/hooks serves the same "Plugins Overview" content as /sdk/plugins.
+> Config paths: https://docs.cline.bot/customization/plugins)
+> Snapshot: 2026-09-29
 
 ## Migration Note
 
@@ -13,33 +15,67 @@ PostToolUse, UserPromptSubmit, PreCompact) is superseded by the SDK hooks below.
 
 ## SDK Plugin Structure
 
-Hooks are defined via the Cline SDK (TypeScript):
+Hooks are defined inside the `hooks` object of an `AgentPlugin` (not directly on the extension):
 
 ```typescript
-import { ClineHook } from "@cline/sdk";
+import { type AgentPlugin } from "@cline/sdk"
 
-const hook: ClineHook = {
-  mode: "blocking",          // "blocking" | "async"
-  timeoutMs: 30000,
-  retries: 0,
-  retryDelayMs: 1000,
-  failureMode: "fail_open",  // "fail_open" | "fail_closed"
-  maxConcurrency: 1,
-  queueLimit: 100,
-};
+const myPlugin: AgentPlugin = {
+  name: "my-plugin",
+  manifest: {
+    capabilities: ["tools", "hooks"],
+  },
+  setup(api, ctx) {
+    // Register tools, commands, providers via api.registerTool(), etc.
+  },
+  hooks: {
+    beforeTool(context) { /* observe or audit tool calls */ },
+    afterRun(context) { /* metrics, cleanup, notify */ },
+  },
+}
 ```
 
-## Hook Configuration Fields
+Available lifecycle hook methods: `beforeRun`, `afterRun`, `beforeModel`, `afterModel`,
+`beforeTool`, `afterTool`, `onEvent`.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `mode` | string | — | `"blocking"` (waits for result) or `"async"` (fire-and-forget) |
-| `timeoutMs` | number | — | Maximum duration before timeout |
-| `retries` | number | 0 | Retry count on failure |
-| `retryDelayMs` | number | 1000 | Pause between retries (ms) |
-| `failureMode` | string | `"fail_open"` | `"fail_open"` proceeds on failure; `"fail_closed"` blocks |
-| `maxConcurrency` | number | 1 | Parallel hook executions |
-| `queueLimit` | number | 100 | Max queued hooks before dropping |
+## Plugin Registration / Config Location
+
+| Method | Location |
+|--------|----------|
+| In code | `cline.start({ config: { extensions: [myPlugin] } })` |
+| File-based | `cline.start({ config: { pluginPaths: ["/absolute/path/to/plugin.ts"] } })` (file exports an `AgentPlugin`) |
+| Global plugins | `~/.cline/plugins/` (`_installed/{npm,git,remote,local}/` managed by `cline plugin install`) |
+| Project plugins | `.cline/plugins/` (`cline plugin install --cwd <path>` installs to `<path>/.cline/plugins`) |
+
+package.json manifest:
+
+```json
+{
+  "cline": {
+    "plugins": [
+      { "paths": ["./index.ts"], "capabilities": ["tools", "hooks"] }
+    ]
+  }
+}
+```
+
+(Plain string entries such as `"./index.ts"` are also accepted.)
+
+Scope: plugins currently apply only to Cline SDK, CLI, and Kanban — not to the VSCode / JetBrains extensions.
+
+## Hook Policies
+
+Hook policies control execution behavior (upstream no longer documents types/defaults):
+
+| Field | Meaning |
+|-------|---------|
+| `mode` | `"blocking"` or `"async"` |
+| `timeoutMs` | Hook timeout |
+| `retries` | Retry count |
+| `retryDelayMs` | Delay between retries |
+| `failureMode` | `"fail_open"` or `"fail_closed"` (use `fail_closed` for policy-enforcement hooks where bypassing is unsafe) |
+| `maxConcurrency` | Concurrent hook executions |
+| `queueLimit` | Queue size before dropping |
 
 ## Hook Events (15 total)
 
