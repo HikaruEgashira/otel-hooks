@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-09-22
+> Snapshot: 2026-09-29
 
 ## Config Location
 
@@ -127,6 +127,8 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 }
 ```
 
+The schema also accepts `continue` and `user_message`, but callers do not enforce them (session creation is never blocked).
+
 ### sessionEnd
 
 ```json
@@ -162,6 +164,8 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "updated_input": "object (optional)"
 }
 ```
+
+`"ask"` is accepted by the schema but not enforced for `preToolUse`.
 
 ### postToolUse
 
@@ -223,6 +227,8 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "user_message": "string (optional)"
 }
 ```
+
+`"ask"` is not supported for `subagentStart` and is treated as `"deny"`.
 
 ### subagentStop
 
@@ -305,6 +311,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "tool_name": "string",
   "tool_input": "string",
   "mcp_server_name": "string",
+  "mcp_server_url": "string (optional, HTTP/SSE servers only)",
   "result_json": "string",
   "duration": "number (ms)"
 }
@@ -377,7 +384,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 ### workspaceOpen
 
 ```json
-// Input (omits conversation/generation/model fields)
+// Input (omits conversation_id, generation_id, model, session_id, transcript_path)
 {
   "hook_event_name": "workspaceOpen",
   "cursor_version": "string",
@@ -464,8 +471,10 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 | `preToolUse` / `postToolUse` / `postToolUseFailure` | Tool type: `Shell`, `Read`, `Write`, `Grep`, `Delete`, `Task`, `MCP:<tool_name>` |
 | `subagentStart` / `subagentStop` | Subagent type: `generalPurpose`, `explore`, `shell` |
 | `beforeShellExecution` / `afterShellExecution` | Shell command text |
-| `beforeReadFile` | Tool type: `TabRead`, `Read` |
-| `afterFileEdit` | Tool type: `TabWrite`, `Write` |
+| `beforeReadFile` | `Read` value |
+| `afterFileEdit` | `Write` value |
+| `beforeTabFileRead` | `TabRead` value |
+| `afterTabFileEdit` | `TabWrite` value |
 | `beforeSubmitPrompt` | `UserPromptSubmit` value |
 | `stop` | `Stop` value |
 | `afterAgentResponse` | `AgentResponse` value |
@@ -498,7 +507,7 @@ Cloud agents execute command-based hooks from `.cursor/hooks.json` only. User-le
 
 **Not supported in cloud agents**: `sessionStart`, `sessionEnd`, `beforeTabFileRead`, `afterTabFileEdit`, `workspaceOpen`, `beforeMCPExecution`, `afterMCPExecution`
 
-Team/enterprise hooks are also unavailable in cloud agents.
+On Enterprise plans, cloud agents also run team hooks and enterprise-managed hooks configured through the web dashboard.
 
 ## Constraints
 
