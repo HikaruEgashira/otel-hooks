@@ -93,13 +93,7 @@ class CopilotConfig:
             group = hooks.setdefault(event_name, [])
             if any("otel-hooks hook" in hook.get("bash", "") for hook in group):
                 continue
-            group.append(
-                {
-                    "type": "command",
-                    "bash": cmd,
-                    "comment": "otel-hooks: emit observability data",
-                }
-            )
+            group.append({"type": "command", "bash": cmd})
         return settings
 
     def unregister_hook(self, settings: Dict[str, Any]) -> Dict[str, Any]:

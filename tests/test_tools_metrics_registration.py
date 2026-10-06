@@ -33,6 +33,8 @@ class MetricsHookRegistrationTest(unittest.TestCase):
             self.assertTrue(
                 any("otel-hooks hook" in item.get("bash", "") for item in hooks[event_name])
             )
+            # "comment" is no longer a documented field (2026-10-06 spec sync)
+            self.assertTrue(all("comment" not in item for item in hooks[event_name]))
 
         self.assertTrue(cfg.is_hook_registered(updated))
 
@@ -122,6 +124,7 @@ class MetricsHookRegistrationTest(unittest.TestCase):
             "PreToolUse", "PostToolUse",
             "PreTaskExec", "PostTaskExec",
             "PostFileCreate", "PostFileSave", "PostFileDelete",
+            "SessionEnd",
         ):
             self.assertIn(trigger, registered_triggers, msg=f"trigger not registered: {trigger}")
 

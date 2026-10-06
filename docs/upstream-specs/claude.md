@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-09-22
+> Snapshot: 2026-10-06
 
 ## Config Location
 
@@ -59,19 +59,19 @@
 | UserPromptSubmit | Yes (exit 2) | — |
 | UserPromptExpansion | Yes (exit 2) | command_name |
 | PreToolUse | Yes (exit 2) | tool_name |
-| PermissionRequest | Yes (exit 2) | tool_name |
+| PermissionRequest | No (exit 2 ignored; deny via `decision`) | tool_name |
 | PermissionDenied | No | tool_name |
-| PostToolUse | Yes (exit 2) | tool_name |
-| PostToolUseFailure | Yes (exit 2) | tool_name |
+| PostToolUse | No (stderr shown to Claude) | tool_name |
+| PostToolUseFailure | No (stderr shown to Claude) | tool_name |
 | PostToolBatch | Yes (exit 2) | — |
-| Notification | No | notification_type: `permission_prompt\|idle_prompt\|auth_success\|elicitation_dialog\|elicitation_complete\|elicitation_response\|agent_needs_input\|agent_completed` |
+| Notification | No | notification_type: `permission_prompt\|idle_prompt\|auth_success\|elicitation_dialog\|elicitation_url_dialog\|elicitation_complete\|elicitation_response\|agent_needs_input\|agent_completed\|quota_auto_resume_fired\|quota_auto_resume_stale\|quota_auto_resume_disabled` |
 | MessageDisplay | No | — |
 | SubagentStart | No | agent_type |
 | SubagentStop | Yes (exit 2) | agent_type |
 | TaskCreated | Yes (exit 2) | — |
 | TaskCompleted | Yes (exit 2) | — |
 | Stop | Yes (exit 2) | — |
-| StopFailure | No | error_type: `rate_limit\|overloaded\|authentication_failed\|...` |
+| StopFailure | No | error: `rate_limit\|overloaded\|authentication_failed\|account_on_hold\|...` |
 | TeammateIdle | Yes (exit 2) | — |
 | ConfigChange | Yes (exit 2) | source |
 | CwdChanged | No | — |
@@ -85,7 +85,7 @@
 | PostModelSwitch | No | model name (regex) |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
-| SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
+| SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|other` |
 
 ## Common Input Fields (all events)
 
@@ -111,9 +111,13 @@
 ### SessionStart
 
 - `source`: `startup|resume|clear|compact|fork`
-- `model`: string
+- `model`: string (optional)
 - `agent_type`: string (optional)
 - `session_title`: string (optional)
+- `seconds_since_last_response`: number (resume/fork only, v2.1.251+)
+- `context_tokens`: number (resume/fork only, v2.1.251+)
+- `prompt_cache_likely_expired`: boolean (resume/fork only, v2.1.251+)
+- `estimated_cache_write_usd`: number (resume/fork only, v2.1.251+)
 
 ### Setup
 
@@ -131,7 +135,7 @@
 ### UserPromptSubmit
 
 - `prompt`: string
-- `is_continuation`: boolean (optional; true when continuing an interrupted session)
+- `session_title`: string (optional; when session has a custom title)
 
 ### UserPromptExpansion
 
@@ -141,18 +145,37 @@
 - `command_source`: `plugin|user|custom`
 - `prompt`: string (original unexpanded prompt)
 
-### PreToolUse / PermissionRequest / PermissionDenied
+### PreToolUse
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
+- `mcp_server`: `{ name, source }` (MCP tools only, v2.1.274+)
+
+### PermissionRequest
+
+- `tool_name`: string
+- `tool_input`: object (tool-specific)
+- `mcp_server`: `{ name, source }` (MCP tools only)
+- `permission_suggestions`: array of permission update entries (optional)
+- (no `tool_use_id`)
+
+### PermissionDenied
+
+- `tool_name`: string
+- `tool_input`: object (tool-specific)
+- `tool_use_id`: string
+- `reason`: string (denial reason)
+- `mcp_server`: `{ name, source }` (MCP tools only)
 
 ### PostToolUse
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
-- `tool_output`: string
+- `tool_response`: object (tool-specific structured output)
+- `duration_ms`: number (optional)
+- `mcp_server`: `{ name, source }` (MCP tools only)
 
 ### PostToolUseFailure
 
@@ -160,33 +183,42 @@
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
 - `error`: string
+- `is_interrupt`: boolean (optional)
+- `duration_ms`: number (optional)
+- `mcp_server`: `{ name, source }` (MCP tools only)
 
 ### PostToolBatch
 
-- `tool_results`: array of `{ tool_name, tool_use_id, tool_input, tool_output?, error? }`
+- `tool_calls`: array of `{ tool_name, tool_input, tool_use_id, tool_response }` (`tool_response` is the serialized tool_result content)
 
 ### Notification
 
 - `message`: string
 - `title`: string (optional)
-- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_complete|elicitation_response|agent_needs_input|agent_completed`
-- `notification_data`: object (optional)
+- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_url_dialog|elicitation_complete|elicitation_response|agent_needs_input|agent_completed|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled`
 
-### SubagentStart / SubagentStop
+### SubagentStart
 
 - `agent_id`: string
 - `agent_type`: string
-- `task`: string (SubagentStart only)
 
-### TaskCreated
+### SubagentStop
+
+- `stop_hook_active`: boolean
+- `agent_id`: string
+- `agent_type`: string
+- `agent_transcript_path`: string
+- `last_assistant_message`: string
+- `background_tasks`: array (see Stop)
+- `session_crons`: array (see Stop)
+
+### TaskCreated / TaskCompleted
 
 - `task_id`: string
-- `task_title`: string (optional)
-
-### TaskCompleted
-
-- `task_id`: string
-- `task_title`: string (optional)
+- `task_subject`: string
+- `task_description`: string (optional)
+- `teammate_name`: string (optional)
+- `team_name`: string (deprecated)
 
 ### CwdChanged
 
@@ -195,82 +227,99 @@
 
 ### DirectoryAdded
 
-- `directory_path`: string (absolute path of newly added directory)
+- `directory`: string (absolute path of newly added directory)
+- `source`: `slash_command|register_repo_root`
 
 ### FileChanged
 
 - `file_path`: string
-- `change_type`: `created|modified|deleted`
-- `file_size`: number
-- `modification_time`: number (Unix seconds)
+- `event`: `change|add|unlink`
 
 ### ConfigChange
 
-- `config_source`: `user_settings|project_settings|local_settings|policy_settings|skills`
-- `file_path`: string
+- `source`: `user_settings|project_settings|local_settings|policy_settings|skills`
+- `file_path`: string (optional)
 
 ### WorktreeCreate
 
-- `isolation_type`: `worktree`
-- `subagent_id`: string (optional)
+- `name`: string (worktree slug)
 
 ### WorktreeRemove
 
 - `worktree_path`: string
-- `isolation_type`: `worktree`
-- `subagent_id`: string (optional)
 
-### PreCompact / PostCompact
+### PreCompact
 
-- `compaction_trigger`: `manual|auto`
-- `context_used`: number (PreCompact only)
-- `context_limit`: number (PreCompact only)
+- `trigger`: `manual|auto`
+- `custom_instructions`: string|null
+
+### PostCompact
+
+- `trigger`: `manual|auto`
+- `compact_summary`: string
 
 ### PreModelSwitch
 
-- `old_model`: string (current model before switch)
-- `new_model`: string (requested model)
+- `from_model`: string
+- `to_model`: string (matcher compares against its canonical name)
+- `requested_model`: string|null
+- `source`: `command|picker|sdk`
+- `context_tokens`: number
+- `prompt_cache_warm`: boolean
+- `cache_ttl`: `5m|1h`
+- `estimated_cache_write_usd`: number
+- `pricing`: `configured|catalog|default`
 
 ### PostModelSwitch
 
-- `old_model`: string
-- `new_model`: string (model now active)
+- Same fields as PreModelSwitch; `source` additionally `auto|resume` (`requested_model` is null when `auto`)
 
 ### Elicitation
 
 - `mcp_server_name`: string
-- `request_id`: string
 - `message`: string
-- `form_schema`: object (JSON Schema)
+- `mode`: `form|url` (optional)
+- `url`: string (optional, url mode)
+- `elicitation_id`: string (optional)
+- `requested_schema`: object (optional, JSON Schema)
 
 ### ElicitationResult
 
 - `mcp_server_name`: string
-- `request_id`: string
 - `action`: `accept|decline|cancel`
-- `content`: object
+- `mode`: `form|url` (optional)
+- `elicitation_id`: string (optional)
+- `content`: object (optional)
 
 ### StopFailure
 
-- `error_type`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown` (`cloud_credential_error` added v2.1.267+)
-- `error_message`: string
+- `error`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown` (`cloud_credential_error` added v2.1.267+)
+- `error_details`: string (optional)
+- `last_assistant_message`: string (optional; the rendered API error text)
 
 ### TeammateIdle
 
-- `teammate_id`: string
 - `teammate_name`: string
+- `team_name`: string (deprecated)
 
 ### MessageDisplay
 
-- `text`: string (content being displayed to user)
+- `turn_id`: string (UUID)
+- `message_id`: string (UUID)
+- `index`: number (zero-based batch index)
+- `final`: boolean
+- `delta`: string (newly completed lines)
 
 ### Stop
 
-- `last_assistant_message`: string (Claude's full response text; formerly `response`, before that `assistant_message`)
+- `stop_hook_active`: boolean
+- `last_assistant_message`: string (Claude's full response text)
+- `background_tasks`: array of `{ id, type, status, description, command?, agent_type?, server?, tool?, name? }`
+- `session_crons`: array of `{ id, schedule, recurring, prompt }`
 
 ### SessionEnd
 
-- `end_reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
+- `reason`: `clear|resume|logout|prompt_input_exit|other` (`bypass_permissions_disabled` removed v2.1.234)
 
 ## Common Output Fields
 
@@ -314,40 +363,74 @@
 - `reason`: string
 - `additionalContext`: string (optional)
 - `sessionTitle`: string (UserPromptSubmit only, optional)
+- `hookSpecificOutput.suppressOriginalPrompt`: boolean (UserPromptSubmit only, optional)
 
 ### PostToolUse
 
 - `decision`: `"block"` (optional)
 - `reason`: string
-- `hookSpecificOutput.updatedToolOutput`: string (optional, replaces tool output seen by Claude)
+- `hookSpecificOutput.updatedToolOutput`: value matching tool output shape (optional, replaces tool output seen by Claude)
+- `hookSpecificOutput.updatedMCPToolOutput`: MCP tools only (optional)
 - `hookSpecificOutput.additionalContext`: string (optional, appended context for Claude)
+- `hookSpecificOutput.classifierContext`: string (optional, note for auto mode classifier, v2.1.236+)
 
-### PostToolBatch / TaskCreated / TaskCompleted / PreCompact
+### PostToolUseFailure
+
+- `hookSpecificOutput.additionalContext`: string (optional)
+
+### PostToolBatch
+
+- `decision`: `"block"` (optional; `continue: false` also stops the loop)
+- `reason`: string
+- `hookSpecificOutput.additionalContext`: string (optional, injected before next model call)
+
+### TaskCreated / TaskCompleted / PreCompact / ConfigChange
+
+- `decision`: `"block"` (optional; TaskCompleted uses exit 2 or `continue: false`)
+- `reason`: string
+
+### Stop / SubagentStop (output)
 
 - `decision`: `"block"` (optional)
 - `reason`: string
-
-### Stop (output)
-
-- `decision`: `"block"` (optional)
-- `reason`: string
-- `hookSpecificOutput.hookEventName`: `"Stop"`
+- `hookSpecificOutput.hookEventName`: `"Stop"` or `"SubagentStop"`
 - `hookSpecificOutput.additionalContext`: string (non-error feedback injected into next turn)
+
+### SubagentStart
+
+- `hookSpecificOutput.additionalContext`: string (added to subagent context)
 
 ### PermissionRequest
 
 - `hookSpecificOutput.decision.behavior`: `allow|deny`
-- `hookSpecificOutput.decision.updatedInput`: object
-- `hookSpecificOutput.decision.permissionRules`: array of rule strings
-- `hookSpecificOutput.decision.saveRule`: `{ "rule": "Edit(*.ts)", "mode": "allow" }` (optional, persists rule to settings)
+- `hookSpecificOutput.decision.updatedInput`: object (allow only)
+- `hookSpecificOutput.decision.updatedPermissions`: array of permission update entries (allow only)
+- `hookSpecificOutput.decision.message`: string (deny only)
+- `hookSpecificOutput.decision.interrupt`: boolean (deny only)
+
+Permission update entry `type`: `addRules|replaceRules|removeRules|setMode|addDirectories|removeDirectories`; `destination`: `session|localSettings|projectSettings|userSettings`
 
 ### PermissionDenied
 
 - `hookSpecificOutput.retry`: boolean
 
+### CwdChanged / FileChanged
+
+- `watchPaths`: string[] (replaces dynamic watch list)
+
 ### WorktreeCreate
 
-- `hookSpecificOutput.worktreePath`: string (absolute path)
+- `hookSpecificOutput.worktreePath`: string (absolute path; command hooks print path on stdout)
+
+### PreModelSwitch
+
+- `hookSpecificOutput.permissionDecision`: `allow|deny|ask`
+- `hookSpecificOutput.permissionDecisionReason`: string
+- `decision`: `"block"` (optional)
+
+### PostModelSwitch
+
+- `hookSpecificOutput.additionalContext`: string
 
 ### MessageDisplay
 
@@ -387,6 +470,11 @@
 - `prompt_id` field: v2.1.196+
 - `scratchpad_dir` field: v2.1.257+
 - `cloud_credential_error` in `StopFailure`: v2.1.267+
+- `mcp_server` input field (tool events): v2.1.274+
+- SessionStart resume/fork cost fields: v2.1.251+
+- `classifierContext` (PostToolUse output): v2.1.236+
+- `quota_auto_resume_*` notification types: v2.1.234+
+- `bypass_permissions_disabled` SessionEnd reason: removed v2.1.234
 
 ## Constraints
 

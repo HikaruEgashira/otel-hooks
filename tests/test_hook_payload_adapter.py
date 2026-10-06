@@ -435,6 +435,18 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertEqual(event.source, "kiro")
         self.assertEqual(event.type, EventType.FILE_WRITE)
 
+    def test_parse_hook_event_for_kiro_manual(self) -> None:
+        """Manual is Kiro-specific and maps to SESSION_END (2026-10-06 spec sync)."""
+        payload = {
+            "hook_event_name": "Manual",
+            "session_id": "kiro-6",
+            "cwd": "/tmp",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "kiro")
+        self.assertEqual(event.type, EventType.SESSION_END)
+
     def test_parse_hook_event_for_copilot_user_prompt_transformed(self) -> None:
         """userPromptTransformed maps to PROMPT_SUBMIT (new Copilot event, 2026-07-21 spec sync)."""
         payload = {

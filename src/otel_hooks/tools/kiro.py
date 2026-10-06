@@ -1,7 +1,8 @@
 """Kiro CLI tool configuration (.kiro/hooks/).
 
 Reference:
-  - https://kiro.dev/docs/cli/hooks/
+  - https://kiro.dev/docs/hooks/
+  - https://kiro.dev/docs/hooks/types/
 """
 
 from pathlib import Path
@@ -24,6 +25,8 @@ _HOOK_EVENTS = (
     "PostFileCreate",
     "PostFileSave",
     "PostFileDelete",
+    # Added in 2026-10-06 spec sync (CLI V3)
+    "SessionEnd",
 )
 
 
