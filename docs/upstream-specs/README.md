@@ -7,14 +7,14 @@
 
 | File | Source | Snapshot |
 |------|--------|----------|
-| [claude.md](claude.md) | https://code.claude.com/docs/en/hooks | 2026-04-13 |
-| [cursor.md](cursor.md) | https://cursor.com/ja/docs/hooks | 2026-04-04 |
-| [codex.md](codex.md) | https://developers.openai.com/codex/config-reference | 2026-04-04 |
+| [claude.md](claude.md) | https://code.claude.com/docs/en/hooks | 2026-10-06 |
+| [cursor.md](cursor.md) | https://cursor.com/ja/docs/hooks | 2026-10-06 |
+| [codex.md](codex.md) | https://learn.chatgpt.com/docs/config-file/config-reference | 2026-10-06 |
 | [opencode.md](opencode.md) | https://opencode.ai/docs/plugins/ | 2026-04-04 |
-| [gemini.md](gemini.md) | https://geminicli.com/docs/hooks/ | 2026-04-04 |
-| [cline.md](cline.md) | https://docs.cline.bot/customization/hooks | 2026-04-04 |
-| [copilot.md](copilot.md) | https://docs.github.com/en/copilot/reference/hooks-configuration | 2026-04-04 |
-| [kiro.md](kiro.md) | https://kiro.dev/docs/cli/hooks/ | 2026-04-04 |
+| [gemini.md](gemini.md) | https://geminicli.com/docs/hooks/ | 2026-06-16 |
+| [cline.md](cline.md) | https://docs.cline.bot/sdk/plugins | 2026-10-06 |
+| [copilot.md](copilot.md) | https://docs.github.com/en/copilot/reference/hooks-configuration | 2026-10-06 |
+| [kiro.md](kiro.md) | https://kiro.dev/docs/hooks/ | 2026-10-06 |
 
 ## 差分検知の使い方
 
