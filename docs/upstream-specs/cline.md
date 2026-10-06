@@ -1,8 +1,8 @@
 # Cline Hooks Specification
 
-> Source: https://docs.cline.bot/sdk/hooks
-> (Original URL https://docs.cline.bot/customization/hooks now redirects to the SDK Hooks page)
-> Snapshot: 2026-06-30
+> Source: https://docs.cline.bot/sdk/plugins
+> (https://docs.cline.bot/sdk/hooks 308-redirects here; https://docs.cline.bot/customization/hooks is a stub page linking to SDK Plugins)
+> Snapshot: 2026-10-06
 
 ## Migration Note
 
@@ -13,33 +13,50 @@ PostToolUse, UserPromptSubmit, PreCompact) is superseded by the SDK hooks below.
 
 ## SDK Plugin Structure
 
-Hooks are defined via the Cline SDK (TypeScript):
+Hooks are defined via the Cline SDK (TypeScript) inside the `hooks` object of an `AgentPlugin`:
 
 ```typescript
-import { ClineHook } from "@cline/sdk";
+import { type AgentPlugin } from "@cline/sdk"
 
-const hook: ClineHook = {
-  mode: "blocking",          // "blocking" | "async"
-  timeoutMs: 30000,
-  retries: 0,
-  retryDelayMs: 1000,
-  failureMode: "fail_open",  // "fail_open" | "fail_closed"
-  maxConcurrency: 1,
-  queueLimit: 100,
-};
+const myPlugin: AgentPlugin = {
+  name: "my-plugin",
+  manifest: { capabilities: ["tools", "hooks"] },
+  setup(api, ctx) { /* api.registerTool(), etc. */ },
+  hooks: {
+    beforeTool(context) { /* ... */ },
+    afterRun(context) { /* ... */ },
+  },
+}
 ```
 
-## Hook Configuration Fields
+Hooks are defined inside the `hooks` object (not on the extension). Available lifecycle hooks:
+`beforeRun`, `afterRun`, `beforeModel`, `afterModel`, `beforeTool`, `afterTool`, `onEvent`.
+Hook stages (below) are listed separately under "Hook Stages".
+
+## Plugin Registration & Locations
+
+Source: https://docs.cline.bot/customization/plugins
+
+- Programmatic: `cline.start({ config: { extensions: [plugin] } })` or `config.pluginPaths: ["/absolute/path/to/plugin.ts"]`
+- CLI: `cline plugin install <npm|git|file URL|local path>` (`--cwd <path>` installs to `<path>/.cline/plugins`)
+- Global plugins: `~/.cline/plugins/` (managed installs under `~/.cline/plugins/_installed/{npm,git,remote,local}/`)
+- Project plugins: `.cline/plugins/`
+- package.json manifest: `"cline": { "plugins": [{ "paths": ["./index.ts"], "capabilities": ["tools", "hooks"] }] }` (or plain string entries); each path exports an `AgentPlugin`
+
+## Hook Configuration Fields (Hook Policies)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `mode` | string | — | `"blocking"` (waits for result) or `"async"` (fire-and-forget) |
 | `timeoutMs` | number | — | Maximum duration before timeout |
-| `retries` | number | 0 | Retry count on failure |
-| `retryDelayMs` | number | 1000 | Pause between retries (ms) |
-| `failureMode` | string | `"fail_open"` | `"fail_open"` proceeds on failure; `"fail_closed"` blocks |
-| `maxConcurrency` | number | 1 | Parallel hook executions |
-| `queueLimit` | number | 100 | Max queued hooks before dropping |
+| `retries` | number | — | Retry count on failure |
+| `retryDelayMs` | number | — | Pause between retries (ms) |
+| `failureMode` | string | — | `"fail_open"` proceeds on failure; `"fail_closed"` blocks |
+| `maxConcurrency` | number | — | Parallel hook executions |
+| `queueLimit` | number | — | Max queued hooks before dropping |
+
+Defaults are not documented upstream.
+Use `fail_closed` for policy-enforcement hooks where bypassing the hook is unsafe.
 
 ## Hook Events (15 total)
 
