@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-09-22
+> Snapshot: 2026-10-06
 
 ## Config Location
 
@@ -16,7 +16,9 @@ Priority (high → low): Enterprise → Team → Project → User
 | Project | `<project>/.cursor/hooks.json` |
 | User | `~/.cursor/hooks.json` |
 
-All matching hooks from all sources execute. Conflicts resolved by priority.
+Hooks can also be installed through plugins from **Customize**.
+
+All matching hooks from all sources execute and responses are merged: `deny` > `ask` > `allow` regardless of source; `user_message` / `agent_message` are concatenated; other fields (e.g. `followup_message`) are last-response-wins, so lower-priority sources override higher-priority ones for those fields.
 
 ## Config Schema
 
@@ -29,7 +31,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
         "command": "string (required)",
         "type": "command|prompt",
         "timeout": "number (seconds, platform default)",
-        "loop_limit": "number|null (default 5)",
+        "loop_limit": "number|null (default 5 for Cursor hooks; null for Claude Code hooks)",
         "failClosed": "boolean (default false)",
         "matcher": "string (regex filter)"
       }
@@ -64,7 +66,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 | `sessionEnd` | No (fire-and-forget) | Conversation ends |
 | `preToolUse` | Yes (allow/deny) | Before any tool executes |
 | `postToolUse` | No (observe) | After tool succeeds |
-| `postToolUseFailure` | No (observe) | After tool fails/times out |
+| `postToolUseFailure` | No (observe) | After tool fails/times out/is denied |
 | `subagentStart` | Yes (allow/deny) | Before subagent (Task) spawns |
 | `subagentStop` | No (followup) | After subagent completes |
 | `beforeShellExecution` | Yes (allow/deny/ask) | Before shell command |
@@ -90,7 +92,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 
 | Event | Controllable | Description |
 |-------|-------------|-------------|
-| `workspaceOpen` | No (fire-and-forget) | Workspace opens; returns plugin paths |
+| `workspaceOpen` | No (fire-and-forget) | Workspace opens and whenever workspace folders change (skipped with no folders; desktop app and CLI); returns plugin paths |
 
 ## Common Input Fields (all events)
 
@@ -118,12 +120,14 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 {
   "session_id": "string",
   "is_background_agent": "boolean",
-  "composer_mode": "agent|ask|edit"
+  "composer_mode": "agent|ask|edit (optional)"
 }
 // Output
 {
   "env": { "<key>": "<value>" },
-  "additional_context": "string"
+  "additional_context": "string",
+  "continue": "boolean (accepted, does not block session creation)",
+  "user_message": "string (accepted)"
 }
 ```
 
@@ -161,6 +165,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "agent_message": "string (optional)",
   "updated_input": "object (optional)"
 }
+// Note: "ask" is accepted by the schema but not currently applied for preToolUse
 ```
 
 ### postToolUse
@@ -222,6 +227,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "permission": "allow|deny",
   "user_message": "string (optional)"
 }
+// Note: "ask" is not supported for subagentStart and is treated as "deny"
 ```
 
 ### subagentStop
@@ -305,6 +311,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "tool_name": "string",
   "tool_input": "string",
   "mcp_server_name": "string",
+  "mcp_server_url": "string (optional, HTTP/SSE servers only)",
   "result_json": "string",
   "duration": "number (ms)"
 }
@@ -464,8 +471,10 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 | `preToolUse` / `postToolUse` / `postToolUseFailure` | Tool type: `Shell`, `Read`, `Write`, `Grep`, `Delete`, `Task`, `MCP:<tool_name>` |
 | `subagentStart` / `subagentStop` | Subagent type: `generalPurpose`, `explore`, `shell` |
 | `beforeShellExecution` / `afterShellExecution` | Shell command text |
-| `beforeReadFile` | Tool type: `TabRead`, `Read` |
-| `afterFileEdit` | Tool type: `TabWrite`, `Write` |
+| `beforeReadFile` | `Read` value |
+| `afterFileEdit` | `Write` value |
+| `beforeTabFileRead` | `TabRead` value |
+| `afterTabFileEdit` | `TabWrite` value |
 | `beforeSubmitPrompt` | `UserPromptSubmit` value |
 | `stop` | `Stop` value |
 | `afterAgentResponse` | `AgentResponse` value |
@@ -498,11 +507,14 @@ Cloud agents execute command-based hooks from `.cursor/hooks.json` only. User-le
 
 **Not supported in cloud agents**: `sessionStart`, `sessionEnd`, `beforeTabFileRead`, `afterTabFileEdit`, `workspaceOpen`, `beforeMCPExecution`, `afterMCPExecution`
 
-Team/enterprise hooks are also unavailable in cloud agents.
+On Enterprise plans, cloud agents also run team hooks (configured via web dashboard) and enterprise-managed hooks. Only command-based hooks run in cloud agents (no prompt hooks). Hooks do not run during an initial read-only exploration phase; they start once the agent has a writable environment.
+
+On Self-Hosted Machines workers (pools and my-machines), the same project hooks run (plus team/enterprise hooks on Enterprise); `sessionStart` and `sessionEnd` fire when a session claims and releases the worker.
 
 ## Constraints
 
-- `failClosed: true` blocks action on hook failure (crash, timeout, invalid JSON); default is fail-open
+- `failClosed: true` blocks action on hook failure (crash, timeout, non-zero exit code, no output); default is fail-open
+- Permission hooks (`beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `beforeTabFileRead`, `subagentStart`, `preToolUse`) block on invalid JSON or a schema-mismatched response even when `failClosed` is `false`
 - `loop_limit` (default 5) caps auto-followups from `stop` and `subagentStop`; set `null` to disable
 - Cursor watches hooks.json and auto-reloads on save
 - Claude Code compatible: exit code 2 = block, Claude-format hooks loaded via Third Party Hooks
