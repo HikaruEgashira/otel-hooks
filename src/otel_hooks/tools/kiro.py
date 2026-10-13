@@ -1,7 +1,7 @@
 """Kiro CLI tool configuration (.kiro/hooks/).
 
 Reference:
-  - https://kiro.dev/docs/cli/hooks/
+  - https://kiro.dev/docs/hooks/
 """
 
 from pathlib import Path
@@ -15,6 +15,7 @@ HOOK_FILE = "otel-hooks.json"
 _HOOK_EVENTS = (
     "AgentSpawn",
     "SessionStart",
+    "SessionEnd",
     "UserPromptSubmit",
     "Stop",
     "PreToolUse",

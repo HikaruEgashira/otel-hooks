@@ -1,7 +1,7 @@
 # OpenCode Plugins Specification
 
 > Source: https://opencode.ai/docs/plugins/
-> Snapshot: 2026-04-04
+> Snapshot: 2026-10-13
 
 ## Config Location
 
@@ -75,9 +75,6 @@ export const PluginName = async (context) => {
 - `session.idle`
 - `session.status`
 - `session.updated`
-
-### Todo
-- `todo.updated`
 
 ### Shell
 - `shell.env` — signature: `async (input, output)`

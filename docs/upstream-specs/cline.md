@@ -1,8 +1,8 @@
 # Cline Hooks Specification
 
-> Source: https://docs.cline.bot/sdk/hooks
-> (Original URL https://docs.cline.bot/customization/hooks now redirects to the SDK Hooks page)
-> Snapshot: 2026-06-30
+> Source: https://docs.cline.bot/sdk/plugins (also https://docs.cline.bot/sdk/hooks)
+> (Original URL https://docs.cline.bot/customization/hooks is now a stub pointing to the SDK Plugins page)
+> Snapshot: 2026-10-13
 
 ## Migration Note
 
@@ -29,6 +29,48 @@ const hook: ClineHook = {
 };
 ```
 
+## Plugin Hook Keys (AgentPlugin)
+
+As of 2026-10-13, hooks are attached via a `hooks` object on an `AgentPlugin`
+(not directly on the plugin). The plugin declares `"hooks"` in
+`manifest.capabilities` and registers tools etc. in `setup(api, ctx)`.
+
+```typescript
+const plugin: AgentPlugin = {
+  name: "my-plugin",
+  manifest: { capabilities: ["tools", "hooks"] },
+  setup(api, ctx) { /* register tools */ },
+  hooks: {
+    beforeTool(context) { /* context.toolCall.name, context.input */ },
+    afterRun(context) { /* context.result.usage.inputTokens / outputTokens */ },
+  },
+};
+```
+
+| Hook key | Context fields documented |
+|----------|---------------------------|
+| `beforeRun` | (none documented) |
+| `afterRun` | `result.usage.inputTokens`, `result.usage.outputTokens` (may be undefined) |
+| `beforeModel` | (none documented; used to adjust system prompt/context) |
+| `afterModel` | (not documented) |
+| `beforeTool` | `toolCall.name`, `input` (a thrown error counts as a tool failure) |
+| `afterTool` | (not documented) |
+| `onEvent` | (not documented) |
+
+Return/output fields: not documented upstream.
+
+## Plugin Locations / Config
+
+| Scope | Path / Setting |
+|-------|----------------|
+| Global | `~/.cline/plugins/` (installed sources under `_installed/{npm,git,remote,local}/`) |
+| Project | `.cline/plugins/` in the repo root |
+| SDK session config | `pluginPaths` (absolute module paths exporting an `AgentPlugin`), `extensions` (plugin objects) |
+| CLI | `cline plugin install <source>` (file URL, npm, git, local path); `--cwd <path>` installs to `<path>/.cline/plugins` |
+| Package plugins | `package.json` `cline.plugins` array with `paths` and `capabilities` |
+
+Applies to Cline SDK, CLI and Kanban (not the VSCode/JetBrains extensions).
+
 ## Hook Configuration Fields
 
 | Field | Type | Default | Description |
@@ -40,6 +82,8 @@ const hook: ClineHook = {
 | `failureMode` | string | `"fail_open"` | `"fail_open"` proceeds on failure; `"fail_closed"` blocks |
 | `maxConcurrency` | number | 1 | Parallel hook executions |
 | `queueLimit` | number | 100 | Max queued hooks before dropping |
+
+(As of 2026-10-13 the upstream page no longer lists default values; defaults above are from the 2026-06-30 snapshot.)
 
 ## Hook Events (15 total)
 
