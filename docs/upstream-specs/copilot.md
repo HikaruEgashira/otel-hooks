@@ -1,7 +1,7 @@
 # GitHub Copilot Hooks Specification
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-09-22
+> Snapshot: 2026-10-13
 
 ## Config Location
 
@@ -14,11 +14,14 @@ Hooks can be defined in dedicated hook files or inline within settings files:
 | Policy (Windows Registry) | `HKLM\Software\Policies\GitHub\Copilot` (REG_SZ values) |
 | Project (repository) — dedicated file | `.github/hooks/<name>.json` |
 | Project (repository) — inline | `.github/copilot/settings.json` or `.github/copilot/settings.local.json` (under `hooks` key) |
-| User (CLI) — dedicated file | `~/.copilot/hooks/` |
-| User (CLI) — inline | `~/.copilot/settings.json` (under `hooks` key) |
-| Plugin-contributed | `hooks.json` (provided by plugin) |
+| Project (repository) — inline, cross-tool | `.claude/settings.json` or `.claude/settings.local.json` (under `hooks` key) |
+| User (CLI) — dedicated file | `~/.copilot/hooks/*.json` (macOS/Linux), `%USERPROFILE%\.copilot\hooks\*.json` (Windows), or `$COPILOT_HOME/hooks/` if set |
+| User (CLI) — inline | `~/.copilot/settings.json` (under `hooks` key; `config.json` is no longer read for hooks) |
+| Plugin-contributed | `hooks.json` or `hooks/hooks.json` in each plugin's install directory |
 
-Load order: Policy → User → Project → Plugins. Hooks from all sources combine.
+Load order (CLI): Policy files → Repository `.github/hooks/*.json` → User `~/.copilot/hooks/*.json` → Inline repo settings (`.github/copilot/settings*.json`, `.claude/settings*.json`) → Inline `~/.copilot/settings.json` → Plugins. Hooks from all sources combine.
+
+Malformed items: in directory-loaded files only the bad item is dropped; invalid JSON, bad `version`, or a non-array event list rejects the whole file. Inline `settings.json` hooks are strict.
 
 Cloud Agent: only `.github/hooks/*.json` files loaded; policy, user-level, and plugin hooks unavailable.
 Cloud agents run in a Linux sandbox; only `bash` field honored (not `powershell`); network is restricted.
@@ -42,6 +45,7 @@ Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must 
         "cwd": "string (optional)",
         "env": { "<key>": "<value>" },
         "timeoutSec": 30,
+        "matcher": "string (optional regex; see Matcher Filtering)",
         "comment": "string (optional)"
       }
     ]
@@ -52,9 +56,9 @@ Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must 
 
 ### Hook Types
 
-- `command` — shell script; `bash` (Linux/macOS), `powershell` (Windows), or cross-platform `command`
-- `http` — POST JSON payload; fields: `url`, `headers`, `allowedEnvVars`, `timeoutSec`
-- `prompt` — auto-submit text; fields: `prompt`
+- `command` — shell script; `bash` (Linux/macOS), `powershell` (Windows), or cross-platform `command`. `type` defaults to `command` when omitted. `exec`/`args` are CLI only and cannot be combined with `bash`/`powershell`/`command`
+- `http` — POST JSON payload; fields: `url`, `headers`, `allowedEnvVars`, `timeoutSec`. `url` must be `https://` for `preToolUse` and `permissionRequest`
+- `prompt` — auto-submit text; fields: `prompt`. Only valid on `sessionStart` (CLI: new interactive sessions only)
 
 **Progress Messages** (command hooks): Hooks may emit transient status updates to stdout before the final JSON output:
 
@@ -67,7 +71,39 @@ Lines with `"type": "progress"` are consumed and displayed as status; they are e
 
 ### Matcher Filtering
 
-Optional regex patterns supported for: `notification`, `permissionRequest`, `postToolUse`, `preCompact`, `preToolUse`, `subagentStart`
+Optional regex patterns (compiled as `^(?:PATTERN)$`) supported for:
+
+| Event | Matched against |
+|-------|-----------------|
+| `notification` | `notification_type` |
+| `permissionRequest` | `toolName` |
+| `postToolUse` | `toolName` |
+| `preCompact` | `trigger` |
+| `preToolUse` | `toolName` |
+| `subagentStart` | `agentName` |
+
+## Event Name Casing / Payload Formats
+
+Event names may be configured in camelCase or PascalCase. The casing selects the payload format: camelCase → camelCase payload (below); PascalCase → VS Code-compatible snake_case payload with `hook_event_name`.
+
+| camelCase | PascalCase |
+|-----------|-----------|
+| sessionStart | SessionStart |
+| sessionEnd | SessionEnd |
+| userPromptSubmitted | UserPromptSubmit |
+| userPromptTransformed | (none) |
+| preToolUse | PreToolUse |
+| postToolUse | PostToolUse |
+| postToolUseFailure | PostToolUseFailure |
+| agentStop | Stop |
+| subagentStart | (none) |
+| subagentStop | SubagentStop |
+| errorOccurred | ErrorOccurred |
+| preCompact | PreCompact |
+| permissionRequest | PermissionRequest |
+| notification | (none) |
+
+VS Code (snake_case) payload fields: `hook_event_name`, `session_id`, `timestamp` (ISO 8601), `cwd`, plus per-event: `source`, `initial_prompt` (SessionStart); `reason` (SessionEnd); `prompt` (UserPromptSubmit); `tool_name`, `tool_input` (PreToolUse); `tool_name`, `tool_input`, `tool_result: { result_type, text_result_for_llm }` (PostToolUse); `tool_name`, `tool_input`, `error` (PostToolUseFailure); `transcript_path`, `stop_reason`, `stop_hook_active` (Stop); `transcript_path`, `agent_id`, `agent_type`, `agent_name`, `agent_display_name`, `last_assistant_message`, `stop_reason` (SubagentStop); `error`, `error_context`, `recoverable` (ErrorOccurred); `transcript_path`, `trigger`, `custom_instructions` (PreCompact).
 
 ## Hook Events (14 total)
 
@@ -179,7 +215,7 @@ Output:
   "toolName": "string",
   "toolArgs": "string (JSON-stringified)",
   "toolResult": {
-    "resultType": "success|failure|denied",
+    "resultType": "success",
     "textResultForLlm": "string"
   }
 }
@@ -279,6 +315,10 @@ Output:
 }
 ```
 
+### permissionRequest
+
+Full input schema not documented. References `toolName` (matcher target) and `toolInput` (may include `requestSandboxBypass: true`; `allow` does not pre-approve such requests).
+
 ### notification
 
 ```json
@@ -312,7 +352,7 @@ Output:
 }
 ```
 
-Note: only `deny` is processed.
+Note: `permissionDecisionReason` is required for `deny`; `ask` becomes `deny` in cloud agent.
 
 ### postToolUse
 
@@ -376,8 +416,9 @@ Note: only `deny` is processed.
 | Code | Meaning |
 |------|---------|
 | 0 | Success — stdout parsed as JSON |
-| 2 | Warning — stderr surfaced but execution continues |
-| Other | Logged failure — execution continues |
+| 2 | Warning — stderr surfaced but execution continues. For `preToolUse`/`permissionRequest`: deny (even if stdout says allow). For `postToolUseFailure`: stdout appended as `additionalContext` |
+| Other | Logged failure — execution continues (`preToolUse`: denied, fail-closed) |
+| Timeout | Killed after `timeoutSec`; always fail-open (all events, including `preToolUse` and policy hooks) |
 
 ## Supported Tool Names (for `preToolUse` matcher)
 
@@ -418,7 +459,10 @@ Note: only `deny` is processed.
 - Scripts read JSON from stdin
 - `disableAllHooks: true` disables all hooks in a file
 - `transcriptPath` now included in `agentStop`, `subagentStart`, `subagentStop`, `preCompact`
-- `preToolUse` is **fail-closed**: crashes, non-zero exits (other than 2), and timeouts all deny the tool call
-- **Runaway guard**: After 8 consecutive `block` decisions from `agentStop`, the CLI overrides and ends the turn
+- `preToolUse` command hooks are **fail-closed** on crashes, exit 2, and non-timeout errors; timeouts are fail-open. HTTP hooks are fail-open on network errors, timeouts, and non-2xx responses
+- **Runaway guard**: After 8 consecutive `block` decisions from `agentStop` / `subagentStop`, the CLI overrides and ends the turn
+- Built-in `general-purpose` agent does not emit `subagentStart` / `subagentStop`
+- `/clear` (CLI) fires `sessionEnd` with `reason: "user_exit"` as a detached background hook
+- Sandboxed CLI sessions: repo, user, and plugin command hooks run inside the sandbox; policy hooks run on the host
 - Hook output bounded at **10 MiB** per invocation; `additionalContext` capped at **10 KB** when multiple hooks return it
 - HTTP hooks require HTTPS by default for permission events; HTTP allowed for localhost only with `COPILOT_HOOK_ALLOW_LOCALHOST=1`

@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
 > Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-09-22
+> Snapshot: 2026-10-13
 
 ## Config Location
 
@@ -305,6 +305,7 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
   "tool_name": "string",
   "tool_input": "string",
   "mcp_server_name": "string",
+  "mcp_server_url": "string (optional, HTTP/SSE servers only)",
   "result_json": "string",
   "duration": "number (ms)"
 }
@@ -492,13 +493,13 @@ All matching hooks from all sources execute. Conflicts resolved by priority.
 
 ## Cloud Agent Support
 
-Cloud agents execute command-based hooks from `.cursor/hooks.json` only. User-level hooks are unavailable to cloud agents.
+Cloud agents execute command-based hooks only (prompt hooks unsupported). Sources: project `.cursor/hooks.json`, plus Team hooks (dashboard) and Enterprise-managed hooks on Enterprise plans. User-level `~/.cursor/hooks.json` is unavailable to cloud agents. Hooks do not run during initial read-only exploration turns.
 
 **Supported in cloud agents**: `beforeShellExecution`, `afterShellExecution`, `beforeReadFile`, `afterFileEdit`, `preToolUse`, `postToolUse`, `postToolUseFailure`, `subagentStart`, `subagentStop`, `beforeSubmitPrompt`, `preCompact`, `afterAgentResponse`, `afterAgentThought`, `stop`
 
 **Not supported in cloud agents**: `sessionStart`, `sessionEnd`, `beforeTabFileRead`, `afterTabFileEdit`, `workspaceOpen`, `beforeMCPExecution`, `afterMCPExecution`
 
-Team/enterprise hooks are also unavailable in cloud agents.
+Self-hosted workers (pools / My Machines) run the same project hooks (plus Team/Enterprise hooks on Enterprise); there, `sessionStart` / `sessionEnd` fire when a session claims / releases the worker.
 
 ## Constraints
 

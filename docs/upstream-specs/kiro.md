@@ -1,7 +1,7 @@
 # Kiro Hooks Specification
 
 > Source: https://kiro.dev/docs/hooks/ (formerly https://kiro.dev/docs/cli/hooks/)
-> Snapshot: 2026-09-22
+> Snapshot: 2026-10-13
 
 ## Config Location
 
@@ -31,8 +31,11 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
       "timeout": 60,
       "enabled": true,
       "confirm": {
-        "message": "string (optional, prompt shown before execution)",
-        "default": "allow|deny (optional)"
+        "question": "string (static prompt)",
+        "options": [
+          { "id": "string", "label": "string", "run": "string" }
+        ],
+        "confirmCommand": "string (optional)"
       }
     }
   ]
@@ -52,28 +55,35 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
 | `timeout_ms` | integer (ms) | No | 30000 | Hook execution timeout (alternative to `timeout`; added 2026-07-28) |
 | `cache_ttl_seconds` | integer | No | 0 | Cache successful hook results; 0 = no caching (added 2026-07-28) |
 | `enabled` | boolean | No | true | Toggle hook without deletion |
-| `confirm` | object | No | — | Confirmation prompt config before execution (added 2026-09-22) |
+| `confirm` | object | No | — | Confirmation prompt for `Stop` command hooks only: `question`, `options` (each `id`, `label`, `run`), optional `confirmCommand` (schema changed 2026-10-13; previously `message`/`default`) |
 
 ### Action Types
 
 - `command` — `{ "type": "command", "command": "shell command" }`
 - `agent` — `{ "type": "agent", "prompt": "agent prompt text" }` (timeout ignored)
 
-## Hook Events (11 total)
+### confirmCommand Output
+
+`confirmCommand` stdout may be `{ "skip": true }` (suppress the prompt) or `{ "question": "...", "options": [...] }` (replace the static prompt). Non-zero exit, timeout, or invalid JSON falls back to the static `question`/`options`.
+
+## Hook Events (12 total)
 
 | Trigger | Activation | Matcher Type | Blockable | Platforms |
 |---------|------------|--------------|-----------|-----------|
-| `AgentSpawn` | Agent activates (added 2026-07-28) | N/A | No | CLI only |
-| `SessionStart` | Session begins | N/A | No | IDE only |
-| `UserPromptSubmit` | User submits prompt | N/A | Yes | IDE, CLI |
-| `Stop` | Agent completes turn | N/A | No | IDE, CLI |
+| `AgentSpawn` | Agent activates (added 2026-07-28) | N/A | No | CLI 2.x; alias of `SessionStart` in CLI V3 |
+| `SessionStart` | Session begins | N/A | No | IDE, CLI V3 |
+| `SessionEnd` | CLI V3 session torn down (added 2026-10-13) | N/A | No | CLI V3 only |
+| `UserPromptSubmit` | User submits prompt | N/A | IDE: Yes; CLI: No | IDE, CLI |
+| `Stop` | Agent completes turn | N/A | CLI V3: can force another turn | IDE, CLI |
 | `PreToolUse` | Before tool executes | Tool name (regex) | Yes | IDE, CLI |
 | `PostToolUse` | After tool executes | Tool name (regex) | No | IDE, CLI |
-| `PreTaskExec` | Before spec task starts | N/A | Yes | IDE only |
-| `PostTaskExec` | After spec task finishes | N/A | No | IDE only |
-| `PostFileCreate` | File created by agent | File path (regex) | No | IDE only |
-| `PostFileSave` | File saved by agent | File path (regex) | No | IDE only |
-| `PostFileDelete` | File deleted by agent | File path (regex) | No | IDE only |
+| `PreTaskExec` | Before spec task starts | N/A | Yes | IDE, CLI V3 |
+| `PostTaskExec` | After spec task finishes | N/A | No | IDE, CLI V3 |
+| `PostFileCreate` | File created by agent | File path (regex) | No | IDE, CLI V3 |
+| `PostFileSave` | File saved by agent | File path (regex) | No | IDE, CLI V3 |
+| `PostFileDelete` | File deleted by agent | File path (regex) | No | IDE, CLI V3 |
+
+CLI 2.x → V3 trigger name mapping: `agentSpawn` → `SessionStart`, `userPromptSubmit` → `UserPromptSubmit`, `preToolUse` → `PreToolUse`, `postToolUse` → `PostToolUse`, `stop` → `Stop`.
 
 ## Common Input Fields (all events)
 
@@ -103,7 +113,8 @@ Additional fields:
 {
   "tool_name": "string",
   "tool_input": "object",
-  "tool_response": "object (PostToolUse only)"
+  "tool_response": "object (PostToolUse only)",
+  "tool_tags": "string[] (V2 engine only, e.g. [\"read\", \"@builtin\"]; not sent by Classic/V3 engines)"
 }
 ```
 
@@ -134,8 +145,9 @@ Additional fields:
 
 - `timeout` applies to command actions only (not agent actions)
 - `timeout: 0` disables the limit
-- Blocking supported for: PreToolUse, UserPromptSubmit, PreTaskExec (via exit code 2 or JSON `{"decision": "block", "reason": "..."}` output)
-- `Stop` event is non-blocking (fire-and-forget; previously documented as blockable)
+- Blocking supported for: PreToolUse, UserPromptSubmit (IDE only), PreTaskExec (via exit code 2 or JSON `{"decision": "block", "reason": "..."}` output)
+- CLI `UserPromptSubmit` cannot block: CLI V3 sends the prompt regardless of exit code; non-zero exit forwards hook output and exit code to the agent as context
+- `Stop`: exit code 2 cannot reject the event; in CLI V3 a `Stop` command hook may exit 1 or return `{"decision":"block","reason":"..."}` to make Kiro continue for another turn
 - `SessionStart` hooks are never cached
 - Matcher field filters by tool name (PreToolUse/PostToolUse) or file path (PostFileCreate/PostFileSave/PostFileDelete) using regex
 - File-triggered hooks respond only to agent-initiated changes, not manual edits

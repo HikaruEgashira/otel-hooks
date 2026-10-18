@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-09-22
+> Snapshot: 2026-10-13
 
 ## Config Location
 
@@ -31,7 +31,8 @@
             "timeout": 600,
             "statusMessage": "string",
             "once": false,
-            "if": "permission_rule_syntax"
+            "if": "permission_rule_syntax",
+            "onFailure": "continue|block"
           }
         ]
       }
@@ -43,8 +44,8 @@
 
 ### Hook Types
 
-- `command` — shell command (`command`, `args`, `async`, `asyncRewake`, `shell`); when `args` present uses exec form (no shell)
-- `http` — POST request (`url`, `headers`, `allowedEnvVars`)
+- `command` — shell command (`command`, `args`, `async`, `asyncRewake`, `shell`: `bash|powershell`, `onFailure`: `continue|block` (v2.1.295+)); when `args` present uses exec form (no shell)
+- `http` — POST request (`url`, `headers`, `allowedEnvVars`, `onFailure`)
 - `mcp_tool` — MCP tool call (`server`, `tool`, `input` with `${path}` substitution)
 - `prompt` — LLM prompt (`prompt`, `model`)
 - `agent` — agent invocation (`prompt`, `model`) [experimental]
@@ -64,16 +65,16 @@
 | PostToolUse | Yes (exit 2) | tool_name |
 | PostToolUseFailure | Yes (exit 2) | tool_name |
 | PostToolBatch | Yes (exit 2) | — |
-| Notification | No | notification_type: `permission_prompt\|idle_prompt\|auth_success\|elicitation_dialog\|elicitation_complete\|elicitation_response\|agent_needs_input\|agent_completed` |
+| Notification | No | notification_type: `permission_prompt\|idle_prompt\|auth_success\|elicitation_dialog\|elicitation_url_dialog\|elicitation_complete\|elicitation_response\|agent_needs_input\|agent_completed\|quota_auto_resume_fired\|quota_auto_resume_stale\|quota_auto_resume_disabled` |
 | MessageDisplay | No | — |
 | SubagentStart | No | agent_type |
 | SubagentStop | Yes (exit 2) | agent_type |
 | TaskCreated | Yes (exit 2) | — |
 | TaskCompleted | Yes (exit 2) | — |
 | Stop | Yes (exit 2) | — |
-| StopFailure | No | error_type: `rate_limit\|overloaded\|authentication_failed\|...` |
+| StopFailure | No | error: `rate_limit\|overloaded\|authentication_failed\|account_on_hold\|...` |
 | TeammateIdle | Yes (exit 2) | — |
-| ConfigChange | Yes (exit 2) | source |
+| ConfigChange | Yes (exit 2; not for `policy_settings`) | source: `user_settings\|project_settings\|local_settings\|policy_settings\|skills` |
 | CwdChanged | No | — |
 | DirectoryAdded | No | addition method: `slash_command\|register_repo_root` |
 | FileChanged | No | filename (basename) |
@@ -85,7 +86,7 @@
 | PostModelSwitch | No | model name (regex) |
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
-| SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|bypass_permissions_disabled\|other` |
+| SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|other` (`bypass_permissions_disabled` removed v2.1.234) |
 
 ## Common Input Fields (all events)
 
@@ -114,6 +115,7 @@
 - `model`: string
 - `agent_type`: string (optional)
 - `session_title`: string (optional)
+- `seconds_since_last_response`, `context_tokens`, `prompt_cache_likely_expired`, `estimated_cache_write_usd` (only when `source` is `resume`/`fork` and transcript has a Claude response; v2.1.251+)
 
 ### Setup
 
@@ -131,6 +133,7 @@
 ### UserPromptSubmit
 
 - `prompt`: string
+- `session_title`: string (optional)
 - `is_continuation`: boolean (optional; true when continuing an interrupted session)
 
 ### UserPromptExpansion
@@ -141,18 +144,34 @@
 - `command_source`: `plugin|user|custom`
 - `prompt`: string (original unexpanded prompt)
 
-### PreToolUse / PermissionRequest / PermissionDenied
+### PreToolUse
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
+- `mcp_server`: string (MCP tools only; v2.1.274+)
+
+### PermissionRequest
+
+- `tool_name`: string
+- `tool_input`: object (tool-specific)
+- `permission_suggestions`: array (optional)
+
+### PermissionDenied
+
+- `tool_name`: string
+- `tool_input`: object (tool-specific)
+- `tool_use_id`: string
+- `reason`: string
 
 ### PostToolUse
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
-- `tool_output`: string
+- `tool_response`: object/string (tool result)
+- `duration_ms`: number
+- `mcp_server`: string (MCP tools only)
 
 ### PostToolUseFailure
 
@@ -160,33 +179,37 @@
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
 - `error`: string
+- `is_interrupt`: boolean (optional)
+- `duration_ms`: number (optional)
 
 ### PostToolBatch
 
-- `tool_results`: array of `{ tool_name, tool_use_id, tool_input, tool_output?, error? }`
+- `tool_calls`: array of `{ tool_name, tool_input, tool_use_id, tool_response }` (`tool_response` is serialized tool_result content)
 
 ### Notification
 
 - `message`: string
 - `title`: string (optional)
-- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_complete|elicitation_response|agent_needs_input|agent_completed`
+- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_url_dialog|elicitation_complete|elicitation_response|agent_needs_input|agent_completed|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled` (`quota_auto_resume_*` v2.1.234+)
 - `notification_data`: object (optional)
 
 ### SubagentStart / SubagentStop
 
 - `agent_id`: string
 - `agent_type`: string
-- `task`: string (SubagentStart only)
+- `stop_hook_active`: boolean (SubagentStop only)
+- `agent_transcript_path`: string (SubagentStop only)
+- `last_assistant_message`: string (SubagentStop only; with `SubagentHandback` tool (v2.1.271+) the report is in that tool call's `tool_input.message`, not here)
+- `background_tasks`, `session_crons`: arrays (SubagentStop only; same shape as Stop)
 
-### TaskCreated
-
-- `task_id`: string
-- `task_title`: string (optional)
-
-### TaskCompleted
+### TaskCreated / TaskCompleted
 
 - `task_id`: string
-- `task_title`: string (optional)
+- `task_subject`: string
+- `task_description`: string (optional)
+- `teammate_name`: string (optional)
+- `team_name`: string (deprecated)
+- `agent_id`: string (optional, v2.1.290+)
 
 ### CwdChanged
 
@@ -195,82 +218,100 @@
 
 ### DirectoryAdded
 
-- `directory_path`: string (absolute path of newly added directory)
+- `directory`: string (absolute path of newly added directory)
+- `source`: `slash_command|register_repo_root`
 
 ### FileChanged
 
-- `file_path`: string
-- `change_type`: `created|modified|deleted`
-- `file_size`: number
-- `modification_time`: number (Unix seconds)
+- `file_path`: string (absolute path)
+- `event`: `change|add|unlink` (modified|created|deleted)
 
 ### ConfigChange
 
-- `config_source`: `user_settings|project_settings|local_settings|policy_settings|skills`
-- `file_path`: string
+- `source`: `user_settings|project_settings|local_settings|policy_settings|skills`
+- `file_path`: string (optional)
 
 ### WorktreeCreate
 
-- `isolation_type`: `worktree`
-- `subagent_id`: string (optional)
+- `name`: string (worktree slug, e.g. `bold-oak-a3f2`)
 
 ### WorktreeRemove
 
-- `worktree_path`: string
-- `isolation_type`: `worktree`
-- `subagent_id`: string (optional)
+- `worktree_path`: string (absolute path)
 
-### PreCompact / PostCompact
+### PreCompact
 
-- `compaction_trigger`: `manual|auto`
-- `context_used`: number (PreCompact only)
-- `context_limit`: number (PreCompact only)
+- `trigger`: `manual|auto`
+- `custom_instructions`: string|null (manual `/compact` args; null for auto)
 
-### PreModelSwitch
+### PostCompact
 
-- `old_model`: string (current model before switch)
-- `new_model`: string (requested model)
+- `trigger`: `manual|auto`
+- `compact_summary`: string
 
-### PostModelSwitch
+### PreModelSwitch (v2.1.251+)
 
-- `old_model`: string
-- `new_model`: string (model now active)
+- `from_model`: string (model ID switching from)
+- `to_model`: string (model ID switching to; matcher compares its canonical name)
+- `requested_model`: string|null (alias or model ID; null for default)
+- `source`: `command|picker|sdk`
+- `context_tokens`: number
+- `prompt_cache_warm`: boolean
+- `cache_ttl`: `5m|1h`
+- `estimated_cache_write_usd`: number
+- `pricing`: `configured|catalog|default`
+
+### PostModelSwitch (v2.1.251+)
+
+- Same fields as PreModelSwitch; `source` additionally `auto|resume` (`requested_model` null when `auto`)
 
 ### Elicitation
 
 - `mcp_server_name`: string
-- `request_id`: string
 - `message`: string
-- `form_schema`: object (JSON Schema)
+- `mode`: string (optional)
+- `url`: string (optional)
+- `elicitation_id`: string (optional)
+- `requested_schema`: object (optional, JSON Schema)
 
 ### ElicitationResult
 
 - `mcp_server_name`: string
-- `request_id`: string
 - `action`: `accept|decline|cancel`
-- `content`: object
+- `mode`: string (optional)
+- `elicitation_id`: string (optional)
+- `content`: object (optional)
 
 ### StopFailure
 
-- `error_type`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown` (`cloud_credential_error` added v2.1.267+)
-- `error_message`: string
+- `error`: `rate_limit|overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown` (`cloud_credential_error` added v2.1.267+)
+- `error_details`: string (optional)
+- `last_assistant_message`: string (optional)
 
 ### TeammateIdle
 
-- `teammate_id`: string
 - `teammate_name`: string
+- `team_name`: string (deprecated)
+- `agent_id`: string (optional, v2.1.290+)
 
 ### MessageDisplay
 
-- `text`: string (content being displayed to user)
+- `turn_id`: string
+- `message_id`: string
+- `index`: number
+- `final`: boolean
+- `delta`: string (content being displayed to user)
 
 ### Stop
 
+- `stop_hook_active`: boolean
 - `last_assistant_message`: string (Claude's full response text; formerly `response`, before that `assistant_message`)
+- `background_tasks`: array of `{ id, type, status, description, command?, agent_type?, server?, tool?, name? }`
+- `session_crons`: array of `{ id, schedule, recurring, prompt }`
 
 ### SessionEnd
 
-- `end_reason`: `clear|resume|logout|prompt_input_exit|bypass_permissions_disabled|other`
+- `reason`: `clear|resume|logout|prompt_input_exit|other` (`bypass_permissions_disabled` removed v2.1.234)
 
 ## Common Output Fields
 
@@ -294,6 +335,10 @@
 - `watchPaths`: string[] (optional, paths to monitor for FileChanged events)
 - `reloadSkills`: boolean (optional)
 
+### CwdChanged / FileChanged
+
+- `watchPaths`: string[] (replaces dynamic watch list)
+
 ### PreToolUse
 
 ```json
@@ -314,13 +359,25 @@
 - `reason`: string
 - `additionalContext`: string (optional)
 - `sessionTitle`: string (UserPromptSubmit only, optional)
+- `suppressOriginalPrompt`: boolean (UserPromptSubmit only, optional)
 
 ### PostToolUse
 
 - `decision`: `"block"` (optional)
 - `reason`: string
 - `hookSpecificOutput.updatedToolOutput`: string (optional, replaces tool output seen by Claude)
+- `hookSpecificOutput.updatedMCPToolOutput`: (optional, MCP tools)
 - `hookSpecificOutput.additionalContext`: string (optional, appended context for Claude)
+- `hookSpecificOutput.classifierContext`: string (optional, v2.1.236+)
+
+### PreModelSwitch
+
+- `hookSpecificOutput.permissionDecision`: `allow|deny|ask` (no `defer`)
+- `hookSpecificOutput.permissionDecisionReason`: string
+
+### PostModelSwitch
+
+- `hookSpecificOutput.additionalContext`: string
 
 ### PostToolBatch / TaskCreated / TaskCompleted / PreCompact
 
@@ -385,6 +442,12 @@
 ## Version Requirements
 
 - `prompt_id` field: v2.1.196+
+- `bypass_permissions_disabled` SessionEnd reason removed: v2.1.234
+- `quota_auto_resume_*` notification types: v2.1.234+
+- PreModelSwitch / PostModelSwitch, SessionStart resume cost fields: v2.1.251+
+- `mcp_server` input field: v2.1.274+
+- `agent_id` on TaskCreated/TaskCompleted/TeammateIdle: v2.1.290+
+- `onFailure` handler field: v2.1.295+
 - `scratchpad_dir` field: v2.1.257+
 - `cloud_credential_error` in `StopFailure`: v2.1.267+
 
