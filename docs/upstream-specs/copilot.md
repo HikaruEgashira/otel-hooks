@@ -11,7 +11,7 @@ Hooks can be defined in dedicated hook files or inline within settings files:
 |-------|------|
 | Policy (Linux/macOS) | `/etc/github-copilot/policy.d/*.json` |
 | Policy (Windows) | `C:\ProgramData\GitHub\Copilot\policy.d\*.json` |
-| Policy (Windows Registry) | `HKLM\Software\Policies\GitHub\Copilot` (REG_SZ values) |
+| Policy (Windows Registry) | `HKLM\Software\Policies\GitHub\Copilot` (each subkey holds a `Policy` REG_SZ value containing a JSON policy document) |
 | Project (repository) — dedicated file | `.github/hooks/<name>.json` |
 | Project (repository) — inline | `.github/copilot/settings.json` or `.github/copilot/settings.local.json` (under `hooks` key) |
 | Project (repository) — inline, cross-tool | `.claude/settings.json` or `.claude/settings.local.json` (under `hooks` key) |
@@ -24,7 +24,7 @@ Load order (CLI): Policy files → Repository `.github/hooks/*.json` → User `~
 Malformed items: in directory-loaded files only the bad item is dropped; invalid JSON, bad `version`, or a non-array event list rejects the whole file. Inline `settings.json` hooks are strict.
 
 Cloud Agent: only `.github/hooks/*.json` files loaded; policy, user-level, and plugin hooks unavailable.
-Cloud agents run in a Linux sandbox; only `bash` field honored (not `powershell`); network is restricted.
+Cloud agents run in a Linux sandbox; only `bash` field honored (not `powershell`), with the cross-platform `command` field honored as a fallback; network is restricted.
 
 Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must be root-owned and not group/world-writable.
 
@@ -36,7 +36,8 @@ Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must 
   "hooks": {
     "<hookEventName>": [
       {
-        "type": "command",
+        "type": "command (optional; defaults to \"command\")",
+        "matcher": "regex string (optional; see Matcher Filtering)",
         "bash": "string (script path)",
         "powershell": "string (script path)",
         "command": "string (cross-platform path)",
@@ -45,8 +46,8 @@ Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must 
         "cwd": "string (optional)",
         "env": { "<key>": "<value>" },
         "timeoutSec": 30,
-        "matcher": "string (optional regex; see Matcher Filtering)",
-        "comment": "string (optional)"
+        "timeout": "number (optional; alias for timeoutSec)",
+        "comment": "string (optional; not documented upstream as of 2026-09-29)"
       }
     ]
   },
@@ -54,11 +55,18 @@ Policy hooks cannot be disabled by `disableAllHooks`. Policy files (POSIX) must 
 }
 ```
 
+- `timeout`: alias for `timeoutSec`, in seconds. Used only when `timeoutSec` is absent; `timeoutSec` takes precedence when both are present (applies to command and HTTP hooks).
+- `command`: cross-platform fallback, "Copied to both `bash` and `powershell` when those fields are absent".
+- `exec` / `args`: CLI only; do not combine `exec` with `bash`, `powershell`, or `command`.
+- `comment`: not documented upstream as of 2026-09-29.
+
 ### Hook Types
 
 - `command` — shell script; `bash` (Linux/macOS), `powershell` (Windows), or cross-platform `command`. `type` defaults to `command` when omitted. `exec`/`args` are CLI only and cannot be combined with `bash`/`powershell`/`command`
-- `http` — POST JSON payload; fields: `url`, `headers`, `allowedEnvVars`, `timeoutSec`. `url` must be `https://` for `preToolUse` and `permissionRequest`
-- `prompt` — auto-submit text; fields: `prompt`. Only valid on `sessionStart` (CLI: new interactive sessions only)
+- `http` — POST JSON payload; fields: `type` (required, `"http"`), `url` (required), `headers`, `allowedEnvVars`, `timeoutSec`, `timeout` (alias), `matcher`
+  - Only `https://` allowed by default; `http://localhost`, `http://127.*`, `http://[::1]` allowed when `COPILOT_HOOK_ALLOW_LOCALHOST=1`
+  - For `preToolUse` and `permissionRequest`, `url` must use `https://`; when `allowedEnvVars` is set, `url` must use `https://`
+- `prompt` — auto-submit text; fields: `type` (required, `"prompt"`), `prompt` (required). Only valid on `sessionStart` (CLI: new interactive sessions only); fires only for new interactive sessions (not on resume, not in `-p` mode)
 
 **Progress Messages** (command hooks): Hooks may emit transient status updates to stdout before the final JSON output:
 
@@ -71,39 +79,69 @@ Lines with `"type": "progress"` are consumed and displayed as status; they are e
 
 ### Matcher Filtering
 
-Optional regex patterns (compiled as `^(?:PATTERN)$`) supported for:
+Optional `matcher` regex on each hook entry, compiled as `^(?:PATTERN)$` (must match the full value). Invalid regexes cause the hook entry to be skipped.
 
-| Event | Matched against |
-|-------|-----------------|
+| Event | `matcher` is matched against |
+|-------|------------------------------|
 | `notification` | `notification_type` |
 | `permissionRequest` | `toolName` |
 | `postToolUse` | `toolName` |
-| `preCompact` | `trigger` |
+| `preCompact` | `trigger` (`"manual"` or `"auto"`) |
 | `preToolUse` | `toolName` |
 | `subagentStart` | `agentName` |
 
-## Event Name Casing / Payload Formats
+PascalCase `PreToolUse` / `PermissionRequest` use Claude-format matchers: `*`, `**`, or empty fires for every tool; a literal name or `|`-separated alternation matches the runtime or Claude tool name; any other value is a case-sensitive regex anchored `^(?:PATTERN)$` against the Claude tool name.
 
-Event names may be configured in camelCase or PascalCase. The casing selects the payload format: camelCase → camelCase payload (below); PascalCase → VS Code-compatible snake_case payload with `hook_event_name`.
+## VS Code Compatible Payload Format (PascalCase / snake_case)
 
-| camelCase | PascalCase |
-|-----------|-----------|
+Two payload formats are supported, selected by the event name used in the hook configuration:
+
+- **camelCase format** — event name in camelCase (e.g. `sessionStart`); fields use camelCase (schemas below).
+- **VS Code compatible format** — event name in PascalCase (e.g. `SessionStart`); fields use snake_case to match the VS Code Copilot extension format.
+
+| camelCase event | PascalCase event |
+|-----------------|------------------|
 | sessionStart | SessionStart |
 | sessionEnd | SessionEnd |
 | userPromptSubmitted | UserPromptSubmit |
-| userPromptTransformed | (none) |
 | preToolUse | PreToolUse |
 | postToolUse | PostToolUse |
 | postToolUseFailure | PostToolUseFailure |
 | agentStop | Stop |
-| subagentStart | (none) |
 | subagentStop | SubagentStop |
 | errorOccurred | ErrorOccurred |
 | preCompact | PreCompact |
-| permissionRequest | PermissionRequest |
-| notification | (none) |
+| permissionRequest | PermissionRequest (Claude-format matcher semantics) |
 
-VS Code (snake_case) payload fields: `hook_event_name`, `session_id`, `timestamp` (ISO 8601), `cwd`, plus per-event: `source`, `initial_prompt` (SessionStart); `reason` (SessionEnd); `prompt` (UserPromptSubmit); `tool_name`, `tool_input` (PreToolUse); `tool_name`, `tool_input`, `tool_result: { result_type, text_result_for_llm }` (PostToolUse); `tool_name`, `tool_input`, `error` (PostToolUseFailure); `transcript_path`, `stop_reason`, `stop_hook_active` (Stop); `transcript_path`, `agent_id`, `agent_type`, `agent_name`, `agent_display_name`, `last_assistant_message`, `stop_reason` (SubagentStop); `error`, `error_context`, `recoverable` (ErrorOccurred); `transcript_path`, `trigger`, `custom_instructions` (PreCompact).
+`userPromptTransformed`, `subagentStart`, and `notification` have no VS Code compatible variant documented.
+
+Common fields (all VS Code compatible payloads):
+
+```json
+{
+  "hook_event_name": "<PascalCase event name>",
+  "session_id": "string",
+  "timestamp": "string (ISO 8601)",
+  "cwd": "string"
+}
+```
+
+Per-event additional fields:
+
+| Event | Additional fields |
+|-------|-------------------|
+| SessionStart | `source`: `startup\|resume\|new`, `initial_prompt` (optional) |
+| SessionEnd | `reason`: `complete\|error\|abort\|timeout\|user_exit` |
+| UserPromptSubmit | `prompt` |
+| PreToolUse | `tool_name`, `tool_input` (unknown; "parsed from JSON string when possible") |
+| PostToolUse | `tool_name`, `tool_input`, `tool_result`: `{ "result_type": "success", "text_result_for_llm": "string" }` |
+| PostToolUseFailure | `tool_name`, `tool_input`, `error` (string) |
+| Stop | `transcript_path`, `stop_reason`: `end_turn`, `stop_hook_active` (boolean) |
+| SubagentStop | `transcript_path`, `agent_id`, `agent_type`, `agent_name`, `agent_display_name` (optional), `last_assistant_message` (the `response` text), `stop_reason`: `end_turn` |
+| ErrorOccurred | `error`: `{ message, name, stack? }`, `error_context`: `model_call\|tool_execution\|system\|user_input`, `recoverable` (boolean) |
+| PreCompact | `transcript_path`, `trigger`: `manual\|auto`, `custom_instructions` |
+
+Payloads for PascalCase `PreToolUse` report `tool_name` as the Claude tool name (e.g. `Bash`, not `bash`). Output field names (`decision`, `reason`, `modifiedResponse`) are the same in both formats for `agentStop`/`subagentStop`.
 
 ## Hook Events (14 total)
 
@@ -201,7 +239,7 @@ Output:
   "timestamp": "number (Unix ms)",
   "cwd": "string",
   "toolName": "string",
-  "toolArgs": "string (JSON-stringified)"
+  "toolArgs": "unknown"
 }
 ```
 
@@ -213,7 +251,7 @@ Output:
   "timestamp": "number (Unix ms)",
   "cwd": "string",
   "toolName": "string",
-  "toolArgs": "string (JSON-stringified)",
+  "toolArgs": "unknown",
   "toolResult": {
     "resultType": "success",
     "textResultForLlm": "string"
@@ -229,7 +267,7 @@ Output:
   "timestamp": "number (Unix ms)",
   "cwd": "string",
   "toolName": "string",
-  "toolArgs": "string (JSON-stringified)",
+  "toolArgs": "unknown",
   "error": "string"
 }
 ```
@@ -266,7 +304,7 @@ Output:
   "timestamp": "number (Unix ms)",
   "cwd": "string",
   "transcriptPath": "string",
-  "stopReason": "string",
+  "stopReason": "end_turn",
   "stop_hook_active": "boolean (true when a previous Stop hook blocked)"
 }
 ```
@@ -298,7 +336,7 @@ Output:
   "agentName": "string",
   "agentDisplayName": "string (optional)",
   "response": "string (subagent's final response text)",
-  "stopReason": "string"
+  "stopReason": "end_turn"
 }
 ```
 
@@ -317,7 +355,11 @@ Output:
 
 ### permissionRequest
 
-Full input schema not documented. References `toolName` (matcher target) and `toolInput` (may include `requestSandboxBypass: true`; `allow` does not pre-approve such requests).
+No dedicated input schema is documented upstream. References `toolName` (matcher target) and `toolInput` (may include `requestSandboxBypass: true`; a hook `allow` does not pre-approve such requests). Upstream notes a sandbox-bypass exception: for requests with `requestSandboxBypass: true` in `toolInput`, only `deny` propagates; `read` and `hook` permission kinds short-circuit before hooks run.
+
+Notes:
+- `stopReason` is currently always `"end_turn"` (agentStop, subagentStop).
+- `toolArgs` is typed `unknown` upstream (camelCase format).
 
 ### notification
 
@@ -423,6 +465,8 @@ Note: `permissionDecisionReason` is required for `deny`; `ask` becomes `deny` in
 ## Supported Tool Names (for `preToolUse` matcher)
 
 `ask_user`, `bash`, `create`, `edit`, `glob`, `grep`, `powershell`, `task`, `view`, `web_fetch`, `rg`, `str_replace_editor`, `apply_patch`, `web_search`, `update_todo`
+
+Note: as of 2026-09-29 the upstream "Tool names for hook matching" table lists only `ask_user`, `bash`, `create`, `edit`, `glob`, `grep`, `powershell`, `task`, `view`, `web_fetch`; `rg`, `str_replace_editor`, `apply_patch`, `web_search`, `update_todo` appear upstream only in the Claude tool name mapping table below.
 
 ### Claude Tool Name Mappings (PascalCase matchers)
 

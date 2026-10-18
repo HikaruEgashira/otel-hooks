@@ -31,7 +31,7 @@ UPSTREAM_URLS: dict[str, str] = {
     "codex": "https://developers.openai.com/codex/config-reference",
     "opencode": "https://opencode.ai/docs/plugins/",
     "gemini": "https://geminicli.com/docs/hooks/",
-    "cline": "https://docs.cline.bot/customization/hooks",
+    "cline": "https://docs.cline.bot/sdk/plugins",
     "copilot": "https://docs.github.com/en/copilot/reference/hooks-configuration",
     "kiro": "https://kiro.dev/docs/cli/hooks/",
 }
