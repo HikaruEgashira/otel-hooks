@@ -10,8 +10,12 @@
 | Global | `~/.claude/settings.json` |
 | Project | `.claude/settings.json` |
 | Local | `.claude/settings.local.json` |
+| Managed | Managed policy settings (organization-wide, admin-controlled) |
 | Plugin | `hooks/hooks.json` (when plugin enabled) |
-| Skill/Agent | Frontmatter (while component active) |
+| Skill frontmatter | Rest of the session once the skill is invoked |
+| Subagent frontmatter | While that subagent is running |
+
+Hook entries merge across settings levels. `allowManagedHooksOnly` (managed settings) blocks user, project, local, and plugin hooks; hooks from plugins force-enabled in managed `enabledPlugins` are exempt.
 
 ## Config Schema
 
@@ -38,9 +42,13 @@
       }
     ]
   },
-  "disableAllHooks": false
+  "disableAllHooks": false,
+  "allowManagedHooksOnly": false
 }
 ```
+
+- `if`: exactly one permission rule; only evaluated on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`). On other events a hook with `if` set never runs.
+- `once`: removes the hook after its first successful run. Only honored for hooks declared in skill frontmatter; ignored in settings files and agent frontmatter.
 
 ### Hook Types
 
@@ -112,10 +120,13 @@
 ### SessionStart
 
 - `source`: `startup|resume|clear|compact|fork`
-- `model`: string
-- `agent_type`: string (optional)
+- `model`: string (optional; may be omitted, e.g. after `/clear`)
+- `agent_type`: string (optional; with `claude --agent <name>`)
 - `session_title`: string (optional)
-- `seconds_since_last_response`, `context_tokens`, `prompt_cache_likely_expired`, `estimated_cache_write_usd` (only when `source` is `resume`/`fork` and transcript has a Claude response; v2.1.251+)
+- `seconds_since_last_response`: number (resume/fork with prior response only, v2.1.251+)
+- `context_tokens`: number (resume/fork with prior response only, v2.1.251+)
+- `prompt_cache_likely_expired`: boolean (resume/fork with prior response only, v2.1.251+)
+- `estimated_cache_write_usd`: number (resume/fork with prior response only, v2.1.251+)
 
 ### Setup
 
@@ -134,44 +145,46 @@
 
 - `prompt`: string
 - `session_title`: string (optional)
-- `is_continuation`: boolean (optional; true when continuing an interrupted session)
 
 ### UserPromptExpansion
 
 - `expansion_type`: `slash_command|mcp_prompt`
 - `command_name`: string
 - `command_args`: string
-- `command_source`: `plugin|user|custom`
+- `command_source`: string (e.g. `plugin`)
 - `prompt`: string (original unexpanded prompt)
 
 ### PreToolUse
 
 - `tool_name`: string
-- `tool_input`: object (tool-specific)
+- `tool_input`: object (tool-specific; file tool `file_path` always absolute)
 - `tool_use_id`: string
-- `mcp_server`: string (MCP tools only; v2.1.274+)
+- `mcp_server`: `{ name, source }` (MCP tools only; v2.1.274+)
 
 ### PermissionRequest
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
-- `permission_suggestions`: array (optional)
+- `permission_suggestions`: array of permission update entries (optional)
+- `mcp_server`: `{ name, source }` (MCP tools only)
+- (no `tool_use_id`)
 
 ### PermissionDenied
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_use_id`: string
-- `reason`: string
+- `reason`: string (denial reason, e.g. `[Data Exfiltration]`)
+- `mcp_server`: `{ name, source }` (MCP tools only)
 
 ### PostToolUse
 
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
+- `tool_response`: object (tool's structured output)
 - `tool_use_id`: string
-- `tool_response`: object/string (tool result)
-- `duration_ms`: number
-- `mcp_server`: string (MCP tools only)
+- `duration_ms`: number (optional)
+- `mcp_server`: `{ name, source }` (MCP tools only)
 
 ### PostToolUseFailure
 
@@ -181,6 +194,7 @@
 - `error`: string
 - `is_interrupt`: boolean (optional)
 - `duration_ms`: number (optional)
+- `mcp_server`: `{ name, source }` (MCP tools only)
 
 ### PostToolBatch
 
@@ -191,16 +205,20 @@
 - `message`: string
 - `title`: string (optional)
 - `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_url_dialog|elicitation_complete|elicitation_response|agent_needs_input|agent_completed|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled` (`quota_auto_resume_*` v2.1.234+)
-- `notification_data`: object (optional)
 
-### SubagentStart / SubagentStop
+### SubagentStart
 
 - `agent_id`: string
 - `agent_type`: string
-- `stop_hook_active`: boolean (SubagentStop only)
-- `agent_transcript_path`: string (SubagentStop only)
-- `last_assistant_message`: string (SubagentStop only; with `SubagentHandback` tool (v2.1.271+) the report is in that tool call's `tool_input.message`, not here)
-- `background_tasks`, `session_crons`: arrays (SubagentStop only; same shape as Stop)
+
+### SubagentStop
+
+- `stop_hook_active`: boolean
+- `agent_id`: string
+- `agent_type`: string (empty string for internal agents when the session has no agent)
+- `agent_transcript_path`: string
+- `last_assistant_message`: string (with `SubagentHandback` tool (v2.1.271+) the report is in that tool call's `tool_input.message`, not here)
+- `background_tasks`, `session_crons`: arrays (same shape as Stop)
 
 ### TaskCreated / TaskCompleted
 
