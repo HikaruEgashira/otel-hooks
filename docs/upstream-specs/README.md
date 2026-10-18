@@ -16,6 +16,14 @@
 | [copilot.md](copilot.md) | https://docs.github.com/en/copilot/reference/hooks-configuration | 2026-04-04 |
 | [kiro.md](kiro.md) | https://kiro.dev/docs/cli/hooks/ | 2026-04-04 |
 
+## 検査対象
+
+`UPSTREAM_URLS` に登録された全ツールについて、上流ドキュメントの
+イベント名と payload field 名をスナップショットと比較する。追加・削除の
+両方を検知する。チェッカーは仕様の差分を報告するだけで、ハンドラーコードの
+生成やランタイム動作の変更は行わない。変更は必ずレビューしてから
+スナップショットへ反映する。
+
 ## 差分検知の使い方
 
 ```bash
