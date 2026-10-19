@@ -115,6 +115,8 @@ _METRIC_EVENT_MAP: dict[str, EventType] = {
     "PostModelSwitch": EventType.SESSION_END,
     # Codex new events (2026-09-22 spec sync)
     "Interrupt": EventType.SESSION_END,
+    # Kiro new events (2026-10-06 spec sync)
+    "Manual": EventType.SESSION_END,
 }
 
 
@@ -133,6 +135,7 @@ def _detect_source(payload: dict[str, Any]) -> str:
         _KIRO_SPECIFIC = frozenset({
             "PreTaskExec", "PostTaskExec",
             "PostFileCreate", "PostFileSave", "PostFileDelete",
+            "Manual",
         })
         # Old camelCase Kiro events kept for backwards compatibility
         if event_name in _KIRO_SPECIFIC or event_name in ("userPromptSubmit", "stop", "agentSpawn"):

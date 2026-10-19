@@ -383,38 +383,56 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 
 - `decision`: `"block"` (optional)
 - `reason`: string
-- `hookSpecificOutput.updatedToolOutput`: string (optional, replaces tool output seen by Claude)
-- `hookSpecificOutput.updatedMCPToolOutput`: (optional, MCP tools)
+- `hookSpecificOutput.updatedToolOutput`: value matching tool output shape (optional, replaces tool output seen by Claude)
+- `hookSpecificOutput.updatedMCPToolOutput`: MCP tools only (optional)
 - `hookSpecificOutput.additionalContext`: string (optional, appended context for Claude)
 - `hookSpecificOutput.classifierContext`: string (optional, v2.1.236+)
+
+### PostToolUseFailure
+
+- `hookSpecificOutput.additionalContext`: string (optional)
 
 ### PreModelSwitch
 
 - `hookSpecificOutput.permissionDecision`: `allow|deny|ask` (no `defer`)
 - `hookSpecificOutput.permissionDecisionReason`: string
+- `decision`: `"block"` (optional)
 
 ### PostModelSwitch
 
 - `hookSpecificOutput.additionalContext`: string
 
-### PostToolBatch / TaskCreated / TaskCompleted / PreCompact
+### PostToolBatch
+
+- `decision`: `"block"` (optional; `continue: false` also stops the loop)
+- `reason`: string
+- `hookSpecificOutput.additionalContext`: string (optional, injected before next model call)
+
+### TaskCreated / TaskCompleted / PreCompact / ConfigChange
+
+- `decision`: `"block"` (optional; TaskCompleted uses exit 2 or `continue: false`)
+- `reason`: string
+
+### Stop / SubagentStop (output)
 
 - `decision`: `"block"` (optional)
 - `reason`: string
-
-### Stop (output)
-
-- `decision`: `"block"` (optional)
-- `reason`: string
-- `hookSpecificOutput.hookEventName`: `"Stop"`
+- `hookSpecificOutput.hookEventName`: `"Stop"` or `"SubagentStop"`
 - `hookSpecificOutput.additionalContext`: string (non-error feedback injected into next turn)
+
+### SubagentStart
+
+- `hookSpecificOutput.additionalContext`: string (added to subagent context)
 
 ### PermissionRequest
 
 - `hookSpecificOutput.decision.behavior`: `allow|deny`
-- `hookSpecificOutput.decision.updatedInput`: object
-- `hookSpecificOutput.decision.permissionRules`: array of rule strings
-- `hookSpecificOutput.decision.saveRule`: `{ "rule": "Edit(*.ts)", "mode": "allow" }` (optional, persists rule to settings)
+- `hookSpecificOutput.decision.updatedInput`: object (allow only)
+- `hookSpecificOutput.decision.updatedPermissions`: array of permission update entries (allow only)
+- `hookSpecificOutput.decision.message`: string (deny only)
+- `hookSpecificOutput.decision.interrupt`: boolean (deny only)
+
+Permission update entry `type`: `addRules|replaceRules|removeRules|setMode|addDirectories|removeDirectories`; `destination`: `session|localSettings|projectSettings|userSettings`
 
 ### PermissionDenied
 
@@ -422,7 +440,7 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 
 ### WorktreeCreate
 
-- `hookSpecificOutput.worktreePath`: string (absolute path)
+- `hookSpecificOutput.worktreePath`: string (absolute path; command hooks print path on stdout)
 
 ### MessageDisplay
 
@@ -463,8 +481,9 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 - `bypass_permissions_disabled` SessionEnd reason removed: v2.1.234
 - `quota_auto_resume_*` notification types: v2.1.234+
 - PreModelSwitch / PostModelSwitch, SessionStart resume cost fields: v2.1.251+
-- `mcp_server` input field: v2.1.274+
+- `mcp_server` input field (tool events): v2.1.274+
 - `agent_id` on TaskCreated/TaskCompleted/TeammateIdle: v2.1.290+
+- `classifierContext` (PostToolUse output): v2.1.236+
 - `onFailure` handler field: v2.1.295+
 - `scratchpad_dir` field: v2.1.257+
 - `cloud_credential_error` in `StopFailure`: v2.1.267+

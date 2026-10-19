@@ -2,6 +2,7 @@
 
 Reference:
   - https://kiro.dev/docs/hooks/
+  - https://kiro.dev/docs/hooks/types/
 """
 
 from pathlib import Path
