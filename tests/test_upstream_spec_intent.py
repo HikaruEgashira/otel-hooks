@@ -52,6 +52,18 @@ class SnapshotConsistencyTest(unittest.TestCase):
         )
         self.assertEqual(checker.UPSTREAM_URLS["cline"], "https://docs.cline.bot/sdk/plugins")
 
+    def test_codex_source_points_to_learn_chatgpt(self) -> None:
+        url = "https://learn.chatgpt.com/docs/config-file/config-reference"
+        self.assertIn(url, README.read_text())
+        self.assertIn(url, (SPECS_DIR / "codex.md").read_text())
+        self.assertEqual(checker.UPSTREAM_URLS["codex"], url)
+
+    def test_kiro_source_points_to_hooks_root(self) -> None:
+        url = "https://kiro.dev/docs/hooks/"
+        self.assertIn(url, README.read_text())
+        self.assertIn(url, (SPECS_DIR / "kiro.md").read_text())
+        self.assertEqual(checker.UPSTREAM_URLS["kiro"], url)
+
     def test_every_snapshot_has_metadata(self) -> None:
         for tool in checker.UPSTREAM_URLS:
             with self.subTest(tool=tool):
