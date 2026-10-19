@@ -1,6 +1,6 @@
 # Kiro Hooks Specification
 
-> Source: https://kiro.dev/docs/hooks/ (formerly https://kiro.dev/docs/cli/hooks/)
+> Source: https://kiro.dev/docs/hooks/ + https://kiro.dev/docs/hooks/types/ (formerly https://kiro.dev/docs/cli/hooks/, now a redirect)
 > Snapshot: 2026-10-13
 
 ## Config Location
@@ -66,7 +66,9 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
 
 `confirmCommand` stdout may be `{ "skip": true }` (suppress the prompt) or `{ "question": "...", "options": [...] }` (replace the static prompt). Non-zero exit, timeout, or invalid JSON falls back to the static `question`/`options`.
 
-## Hook Events (12 total)
+## Hook Events (13 total)
+
+Authoritative list: https://kiro.dev/docs/hooks/types/
 
 | Trigger | Activation | Matcher Type | Blockable | Platforms |
 |---------|------------|--------------|-----------|-----------|
@@ -82,6 +84,7 @@ otel-hooks writes to `otel-hooks.json` in the relevant directory.
 | `PostFileCreate` | File created by agent | File path (regex) | No | IDE, CLI V3 |
 | `PostFileSave` | File saved by agent | File path (regex) | No | IDE, CLI V3 |
 | `PostFileDelete` | File deleted by agent | File path (regex) | No | IDE, CLI V3 |
+| `Manual` | On-demand hook (Web; CLI V3 lists but cannot invoke; not creatable in IDE v1) | N/A | No | Web, CLI V3 (recognized) |
 
 CLI 2.x → V3 trigger name mapping: `agentSpawn` → `SessionStart`, `userPromptSubmit` → `UserPromptSubmit`, `preToolUse` → `PreToolUse`, `postToolUse` → `PostToolUse`, `stop` → `Stop`.
 
@@ -95,11 +98,14 @@ CLI 2.x → V3 trigger name mapping: `agentSpawn` → `SessionStart`, `userPromp
 }
 ```
 
+Note: payload `hook_event_name` values in docs examples are camelCase (`userPromptSubmit`, `stop`, `agentSpawn`, `preToolUse`, `postToolUse`) even though config `trigger` values are PascalCase.
+
 ## Per-Event Additional Fields
 
 ### UserPromptSubmit
 
 - `prompt`: string (user's input text)
+- Prompt also exposed via `USER_PROMPT` env var for command actions
 
 ### Stop
 
@@ -118,6 +124,12 @@ Additional fields:
 }
 ```
 
+`tool_response` shape: `{"success": bool, "result": [...]}`.
+
+## File-Related Events (PostFileCreate, PostFileSave, PostFileDelete)
+
+- `{{filePath}}` template variable available in `command` for file-related triggers (CLI 3.0 / IDE 1.0 format)
+
 ## Tool Matcher Format
 
 | Pattern | Description |
@@ -126,6 +138,10 @@ Additional fields:
 | `fs_write` / `write` | File write |
 | `execute_bash` / `shell` | Shell execution |
 | `use_aws` / `aws` | AWS operations |
+| `web` | All built-in web tools |
+| `spec` | All built-in spec tools |
+| `@mcp` | All MCP tools (`@`-prefixes matched by regex, e.g. `@mcp.*sql.*`) |
+| `@powers` | All Powers tools |
 | `@git` | All git MCP tools |
 | `@git/status` | Specific MCP tool |
 | `@postgres/query` | Specific MCP tool |

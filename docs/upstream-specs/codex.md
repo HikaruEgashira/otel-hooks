@@ -2,6 +2,7 @@
 
 > Source: https://learn.chatgpt.com/docs/config-file/config-reference
 > (Formerly https://developers.openai.com/codex/config-reference — 308 permanent redirect as of 2026-07-21)
+> Hooks guide: https://learn.chatgpt.com/docs/hooks (formerly https://developers.openai.com/codex/hooks — 308 redirect)
 > Snapshot: 2026-10-13
 
 ## Config Location
@@ -16,12 +17,15 @@
 | Hooks (plugin) | `hooks/hooks.json` in plugin root, or `hooks` entry in `.codex-plugin/plugin.json` |
 | Admin-enforced | `requirements.toml` (managed hooks) |
 
+- Hooks are discovered next to active config layers. All sources load; higher-precedence layers do not replace lower-precedence hooks. If one layer has both `hooks.json` and inline `[hooks]`, Codex merges them and warns at startup.
+- Non-managed hooks must be reviewed and trusted (hash-based) before running. Use `/hooks` in the CLI; `--dangerously-bypass-hook-trust` skips the check for one invocation.
+- Plugin hook commands receive env vars `PLUGIN_ROOT`, `PLUGIN_DATA`, `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`.
+- Multiple matching command hooks for the same event are launched concurrently.
+
 Admin-enforced hook settings in `requirements.toml`:
 - `hooks.managed_dir` (macOS/Linux): absolute path to managed hook scripts
 - `hooks.windows_managed_dir` (Windows): absolute path to managed hook scripts
 - `allow_managed_hooks_only` (boolean): when `true`, user/project/session/plugin hooks are skipped; only managed hooks run (added 2026-10-13)
-
-Non-managed hooks must be reviewed and trusted (via `/hooks`) before they run.
 
 ## Hooks Feature Status
 
@@ -33,6 +37,8 @@ hooks = false  # Disable lifecycle hooks (features.codex_hooks is a deprecated a
 ```
 
 Note: The legacy alias `features.codex_hooks` is deprecated; use `features.hooks`.
+
+Admins can force hooks off via `[features].hooks = false` in `requirements.toml`, or force them on (even if a user disabled them) by pinning `[features].hooks = true` alongside `[hooks]`.
 
 ## Hooks Config Schema
 
@@ -71,13 +77,19 @@ Note: `command` and `mcp_tool` handlers are executed (`mcp_tool` added 2026-10-1
 
 `timeout` is in seconds; default 600 (`SessionEnd` and `Interrupt` default to 1, max 3). `matcher` is a regex; `"*"`, `""`, or omitted matches all.
 
+`mcp_tool` `input` templates use `${field.nested}` expansion from the hook event JSON (a placeholder filling an entire value keeps its JSON type). MCP tool hooks use existing MCP connections (never start/reconnect servers) and are not supported for `SessionEnd`.
+
 ### `async` field
 
-When `async: true`, the hook runs in the background without blocking the triggering operation. Default is `false`. `SessionEnd` always runs synchronously regardless of this setting. Max 8 background hooks run concurrently per session.
+When `async: true`, the hook runs in the background without blocking the triggering operation. Default is `false`. `SessionEnd` always runs synchronously regardless of this setting.
+
+- Up to 8 background hooks run concurrently per session; extra hooks wait.
+- Background hooks cannot block, approve, rewrite, or otherwise control the triggering operation; their `additionalContext`/`systemMessage` is delivered at the next safe point.
+- Unfinished background hooks are cancelled when the session ends.
 
 ### Output Management
 
-The `additionalContextLimit` parameter (default: 2500 tokens) controls when oversized hook output is saved to disk with a shortened model preview. Setting to `0` passes full output directly to the model.
+The per-handler `additionalContextLimit` parameter (default: 2500 tokens) controls when oversized `additionalContext` is saved to disk (`<temp_dir>/hook_outputs/<session_id>/<uuid>.txt`) with a shortened model preview. Setting to `0` passes full output directly to the model.
 
 ## Documented Hook Events (12)
 
@@ -96,23 +108,44 @@ The `additionalContextLimit` parameter (default: 2500 tokens) controls when over
 | `Stop` | Assistant finishes responding |
 | `Interrupt` | Session interrupted by user (added 2026-09-22) |
 
-## Hook Input Payload
+Note: the `requirements.toml` `hooks.<Event>` reference row lists 11 events (omits `Interrupt`); the `config.toml` row and hooks guide list all 12.
 
-Common fields: `session_id`, `transcript_path` (nullable), `cwd`, `hook_event_name`, `model`, `permission_mode` (most events).
+## Common Input Fields (stdin JSON)
 
-| Event | Additional fields |
-|-------|-------------------|
-| `SessionStart` | `source` |
-| `SessionEnd` | `reason` |
-| `SubagentStart` | `turn_id`, `agent_id`, `agent_type` |
-| `PreToolUse` | `turn_id`, `tool_name`, `tool_use_id`, `tool_input` |
-| `PermissionRequest` | `turn_id`, `tool_name`, `tool_input` |
-| `PostToolUse` | `turn_id`, `tool_name`, `tool_use_id`, `tool_input`, `tool_response` |
-| `PreCompact` / `PostCompact` | `turn_id`, `trigger` |
-| `UserPromptSubmit` | `turn_id`, `prompt` |
-| `SubagentStop` | `turn_id`, `agent_id`, `agent_type`, `agent_transcript_path`, `stop_hook_active`, `last_assistant_message` |
-| `Stop` | `turn_id`, `stop_hook_active`, `last_assistant_message` |
-| `Interrupt` | `turn_id` |
+| Field | Type | Notes |
+|-------|------|-------|
+| `session_id` | string | Subagent hooks use the parent session id |
+| `transcript_path` | string \| null | Transcript format is not a stable interface |
+| `cwd` | string | Session working directory |
+| `hook_event_name` | string | Current hook event name |
+| `model` | string | Codex extension; active model slug |
+| `turn_id` | string | Codex extension; turn-scoped events only |
+| `permission_mode` | string | `default`/`acceptEdits`/`plan`/`dontAsk`/`bypassPermissions`; on SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, SubagentStart, SubagentStop, Stop, Interrupt |
+
+## Event-specific Input Fields
+
+| Event | Matcher filters | Extra fields |
+|-------|-----------------|--------------|
+| `SessionStart` | `source` | `source`: startup/resume/clear/compact |
+| `SessionEnd` | `reason` | `reason`: currently always `other` |
+| `SubagentStart` | `agent_type` | `turn_id`, `agent_id`, `agent_type` |
+| `SubagentStop` | `agent_type` | `turn_id`, `agent_id`, `agent_type`, `agent_transcript_path`, `stop_hook_active`, `last_assistant_message` |
+| `PreToolUse` | `tool_name` (Bash, apply_patch/Edit/Write, mcp__*) | `turn_id`, `tool_name`, `tool_use_id`, `tool_input` |
+| `PermissionRequest` | `tool_name` | `turn_id`, `tool_name`, `tool_input` (`tool_input.description` optional) |
+| `PostToolUse` | `tool_name` | `turn_id`, `tool_name`, `tool_use_id`, `tool_input`, `tool_response` |
+| `PreCompact` / `PostCompact` | `trigger` | `turn_id`, `trigger`: manual/auto |
+| `UserPromptSubmit` | (ignored) | `turn_id`, `prompt` |
+| `Stop` | (ignored) | `turn_id`, `stop_hook_active`, `last_assistant_message` |
+| `Interrupt` | (ignored) | `turn_id`, `permission_mode` (main thread only, not subagents) |
+
+## Output Fields
+
+- Common (SessionStart, PreCompact, PostCompact, UserPromptSubmit, SubagentStop, Stop): `continue`, `stopReason`, `systemMessage`, `suppressOutput` (parsed, not implemented).
+- `hookSpecificOutput.{hookEventName, additionalContext}`: SessionStart, SubagentStart, PreToolUse, PostToolUse, UserPromptSubmit.
+- PreToolUse: `permissionDecision: "deny"` + `permissionDecisionReason`, or `"allow"` + `updatedInput`; legacy `{decision:"block", reason}`; exit code 2 + stderr.
+- PermissionRequest: `hookSpecificOutput.decision.behavior` = `allow`/`deny` (+ `message`); any deny wins.
+- PostToolUse / UserPromptSubmit / Stop / SubagentStop: `{decision:"block", reason}` or exit code 2.
+- Stop/SubagentStop require JSON on stdout; Interrupt accepts only optional `systemMessage`.
 
 ## otel-hooks Integration
 

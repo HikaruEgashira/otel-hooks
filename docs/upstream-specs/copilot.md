@@ -92,7 +92,7 @@ Optional `matcher` regex on each hook entry, compiled as `^(?:PATTERN)$` (must m
 
 PascalCase `PreToolUse` / `PermissionRequest` use Claude-format matchers: `*`, `**`, or empty fires for every tool; a literal name or `|`-separated alternation matches the runtime or Claude tool name; any other value is a case-sensitive regex anchored `^(?:PATTERN)$` against the Claude tool name.
 
-## VS Code Compatible Payload Format (PascalCase / snake_case)
+## Payload Formats (camelCase and VS Code Compatible PascalCase / snake_case)
 
 Two payload formats are supported, selected by the event name used in the hook configuration:
 
@@ -153,7 +153,7 @@ Payloads for PascalCase `PreToolUse` report `tool_name` as the Claude tool name 
 | userPromptTransformed | Yes | After prompt transformation, before model receives it |
 | preToolUse | Yes | Before tool execution (can deny) |
 | postToolUse | Yes | After tool execution (can modify result) |
-| postToolUseFailure | Yes | After a tool completes with a failure; can return `additionalContext` |
+| postToolUseFailure | No | After a tool completes with a failure; exit 2 stdout becomes `additionalContext` |
 | errorOccurred | No | Error during execution |
 | agentStop | Yes | Main agent finishes a turn (can block; 8-consecutive-block runaway guard) |
 | notification | Yes | Async system notification (CLI only); can return `additionalContext` |
@@ -272,12 +272,7 @@ Output:
 }
 ```
 
-Output:
-```json
-{
-  "additionalContext": "string (optional, recovery guidance for the model)"
-}
-```
+Output: no JSON output consumed; for command hooks, exit code 2 is treated as `additionalContext` (stdout appended to the failure shown to the agent).
 
 ### errorOccurred
 

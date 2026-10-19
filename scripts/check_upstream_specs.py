@@ -27,13 +27,13 @@ SPECS_DIR = Path(__file__).resolve().parent.parent / "docs" / "upstream-specs"
 
 UPSTREAM_URLS: dict[str, str] = {
     "claude": "https://code.claude.com/docs/en/hooks",
-    "cursor": "https://cursor.com/docs/hooks",
-    "codex": "https://developers.openai.com/codex/config-reference",
+    "cursor": "https://cursor.com/ja/docs/hooks",
+    "codex": "https://learn.chatgpt.com/docs/config-file/config-reference",
     "opencode": "https://opencode.ai/docs/plugins/",
     "gemini": "https://geminicli.com/docs/hooks/",
     "cline": "https://docs.cline.bot/sdk/plugins",
     "copilot": "https://docs.github.com/en/copilot/reference/hooks-configuration",
-    "kiro": "https://kiro.dev/docs/cli/hooks/",
+    "kiro": "https://kiro.dev/docs/hooks/",
 }
 
 # Candidate event-name patterns for each supported tool.  These intentionally

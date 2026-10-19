@@ -13,21 +13,23 @@ PostToolUse, UserPromptSubmit, PreCompact) is superseded by the SDK hooks below.
 
 ## SDK Plugin Structure
 
-Hooks are defined via the Cline SDK (TypeScript):
+Hooks are defined via the Cline SDK (TypeScript) inside the `hooks` object of an `AgentPlugin`:
 
 ```typescript
-import { ClineHook } from "@cline/sdk";
+import { type AgentPlugin } from "@cline/sdk"
 
-const hook: ClineHook = {
-  mode: "blocking",          // "blocking" | "async"
-  timeoutMs: 30000,
-  retries: 0,
-  retryDelayMs: 1000,
-  failureMode: "fail_open",  // "fail_open" | "fail_closed"
-  maxConcurrency: 1,
-  queueLimit: 100,
-};
+const myPlugin: AgentPlugin = {
+  name: "my-plugin",
+  manifest: { capabilities: ["tools", "hooks"] },
+  setup(api, ctx) { /* api.registerTool(), etc. */ },
+  hooks: {
+    beforeTool(context) { /* ... */ },
+    afterRun(context) { /* ... */ },
+  },
+}
 ```
+
+Available lifecycle hooks: `beforeRun`, `afterRun`, `beforeModel`, `afterModel`, `beforeTool`, `afterTool`, `onEvent`.
 
 ## Plugin Hook Keys (AgentPlugin)
 
@@ -69,9 +71,11 @@ Return/output fields: not documented upstream.
 | CLI | `cline plugin install <source>` (file URL, npm, git, local path); `--cwd <path>` installs to `<path>/.cline/plugins` |
 | Package plugins | `package.json` `cline.plugins` array with `paths` and `capabilities` |
 
+Programmatic registration: `cline.start({ config: { extensions: [plugin] } })`, or pass absolute module paths through `config.pluginPaths`.
+
 Applies to Cline SDK, CLI and Kanban (not the VSCode/JetBrains extensions).
 
-## Hook Configuration Fields
+## Hook Configuration Fields (Hook Policies)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -83,7 +87,8 @@ Applies to Cline SDK, CLI and Kanban (not the VSCode/JetBrains extensions).
 | `maxConcurrency` | number | 1 | Parallel hook executions |
 | `queueLimit` | number | 100 | Max queued hooks before dropping |
 
-(As of 2026-10-13 the upstream page no longer lists default values; defaults above are from the 2026-06-30 snapshot.)
+Defaults are not documented on the current upstream page; the values above are retained from the 2026-06-30 snapshot.
+Use `fail_closed` for policy-enforcement hooks where bypassing the hook is unsafe.
 
 ## Hook Events (15 total)
 
