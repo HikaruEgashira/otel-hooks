@@ -11,7 +11,7 @@ jobs:
   analysis:
     name: Scorecard analysis
     timeout-minutes: 5
-    runs-on: [self-hosted, linux, arm64, hikae-flash]
+    runs-on: [self-hosted, linux, arm64, hikae-long]
     permissions:
       security-events: write
       id-token: write
