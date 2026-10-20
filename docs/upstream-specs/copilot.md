@@ -1,7 +1,8 @@
 # GitHub Copilot Hooks Specification
 
-> Source: https://docs.github.com/en/copilot/reference/hooks-configuration
-> Snapshot: 2026-10-13
+> Source: https://docs.github.com/en/copilot/reference/hooks-reference
+> (Formerly https://docs.github.com/en/copilot/reference/hooks-configuration — 301 redirect as of 2026-10-20; page title now "GitHub Copilot hooks reference")
+> Snapshot: 2026-10-20
 
 ## Config Location
 
@@ -18,8 +19,16 @@ Hooks can be defined in dedicated hook files or inline within settings files:
 | User (CLI) — dedicated file | `~/.copilot/hooks/*.json` (macOS/Linux), `%USERPROFILE%\.copilot\hooks\*.json` (Windows), or `$COPILOT_HOME/hooks/` if set |
 | User (CLI) — inline | `~/.copilot/settings.json` (under `hooks` key; `config.json` is no longer read for hooks) |
 | Plugin-contributed | `hooks.json` or `hooks/hooks.json` in each plugin's install directory |
+| Agent-scoped (CLI only) | `hooks` event map in a custom agent's YAML frontmatter; runs only while that agent is selected, in addition to other hooks (added 2026-10-20) |
 
-Load order (CLI): Policy files → Repository `.github/hooks/*.json` → User `~/.copilot/hooks/*.json` → Inline repo settings (`.github/copilot/settings*.json`, `.claude/settings*.json`) → Inline `~/.copilot/settings.json` → Plugins. Hooks from all sources combine.
+Load order (CLI): Policy files → Repository `.github/hooks/*.json` → User `~/.copilot/hooks/*.json` → Inline repo settings (`.github/copilot/settings*.json`, `.claude/settings*.json`) → Inline `~/.copilot/settings.json` → Plugins. Hooks from all sources combine. (Upstream prose states the order as policy → user → project → plugins, while its bullet list puts repository files before user files.) Policy hooks are available regardless of folder trust state.
+
+### Agent-scoped hooks (CLI only)
+
+- Frontmatter `hooks` accepts runtime (`postToolUse`) or alias (`PostToolUse`) event names.
+- `command` is the fallback; `windows`, `linux`, `osx` override it per platform. Paths resolve from the repository root.
+- A subagent's scoped `Stop` (`agentStop`) hooks run at `SubagentStop`; after eight consecutive scoped blocks, further blocks are ignored.
+- Remote or organization-hosted agent definitions do not run scoped hooks.
 
 Malformed items: in directory-loaded files only the bad item is dropped; invalid JSON, bad `version`, or a non-array event list rejects the whole file. Inline `settings.json` hooks are strict.
 
@@ -141,6 +150,8 @@ Per-event additional fields:
 | ErrorOccurred | `error`: `{ message, name, stack? }`, `error_context`: `model_call\|tool_execution\|system\|user_input`, `recoverable` (boolean) |
 | PreCompact | `transcript_path`, `trigger`: `manual\|auto`, `custom_instructions` |
 
+Subagent context fields (added 2026-10-20): hooks that fire inside a subagent include extra fields in their input (root-agent hook inputs are unchanged): `agentId`/`agent_id` (subagent id), `agentType`/`agent_type` (subagent type, when known), `parentAgentId`/`parent_agent_id` (parent agent id, when known).
+
 Payloads for PascalCase `PreToolUse` report `tool_name` as the Claude tool name (e.g. `Bash`, not `bash`). Output field names (`decision`, `reason`, `modifiedResponse`) are the same in both formats for `agentStop`/`subagentStop`.
 
 ## Hook Events (14 total)
@@ -153,7 +164,7 @@ Payloads for PascalCase `PreToolUse` report `tool_name` as the Claude tool name 
 | userPromptTransformed | Yes | After prompt transformation, before model receives it |
 | preToolUse | Yes | Before tool execution (can deny) |
 | postToolUse | Yes | After tool execution (can modify result) |
-| postToolUseFailure | No | After a tool completes with a failure; exit 2 stdout becomes `additionalContext` |
+| postToolUseFailure | Yes | After a tool completes with a failure; can provide recovery guidance via `additionalContext` (exit code 2 for command hooks) |
 | errorOccurred | No | Error during execution |
 | agentStop | Yes | Main agent finishes a turn (can block; 8-consecutive-block runaway guard) |
 | notification | Yes | Async system notification (CLI only); can return `additionalContext` |
@@ -389,7 +400,7 @@ Output:
 }
 ```
 
-Note: `permissionDecisionReason` is required for `deny`; `ask` becomes `deny` in cloud agent.
+Note: `permissionDecisionReason` is required for `deny`; `ask` becomes `deny` in cloud agent and in Copilot CLI autopilot mode (no prompt shown).
 
 ### postToolUse
 
@@ -402,6 +413,8 @@ Note: `permissionDecisionReason` is required for `deny`; `ask` becomes `deny` in
   "additionalContext": "string (optional)"
 }
 ```
+
+`modifiedResult` must have `resultType: "success"`; if returned with `resultType: "failure"`, the failure routes downstream and `postToolUseFailure` fires next. `modifiedResult` is honored by both SDK programmatic hooks and command/HTTP config-file `postToolUse` hooks.
 
 ### subagentStart
 

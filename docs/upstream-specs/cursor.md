@@ -1,7 +1,7 @@
 # Cursor Hooks Specification
 
-> Source: https://cursor.com/ja/docs/hooks (redirects to https://cursor.com/ja/docs/hooks)
-> Snapshot: 2026-10-13
+> Source: https://cursor.com/ja/docs/hooks (307 redirects to https://cursor.com/docs/hooks; English content)
+> Snapshot: 2026-10-20
 
 ## Config Location
 
@@ -13,7 +13,7 @@ Priority (high → low): Enterprise → Team → Project → User
 | Enterprise (Linux/WSL) | `/etc/cursor/hooks.json` |
 | Enterprise (Windows) | `C:\ProgramData\Cursor\hooks.json` |
 | Team | Cloud-distributed (Enterprise only, via web dashboard) |
-| Project | `<project>/.cursor/hooks.json` |
+| Project | `<project>/.cursor/hooks.json` (runs only in trusted workspaces) |
 | User | `~/.cursor/hooks.json` |
 
 Hooks can also be installed through plugins from **Customize**.
@@ -33,7 +33,7 @@ All matching hooks from all sources execute and responses are merged: `deny` > `
         "timeout": "number (seconds, platform default)",
         "loop_limit": "number|null (default 5 for Cursor hooks; null for Claude Code hooks)",
         "failClosed": "boolean (default false)",
-        "matcher": "string (regex filter)"
+        "matcher": "string (regex filter; empty string or \"*\" matches everything)"
       }
     ]
   }

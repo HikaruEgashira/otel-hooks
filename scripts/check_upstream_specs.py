@@ -32,7 +32,7 @@ UPSTREAM_URLS: dict[str, str] = {
     "opencode": "https://opencode.ai/docs/plugins/",
     "gemini": "https://geminicli.com/docs/hooks/",
     "cline": "https://docs.cline.bot/sdk/plugins",
-    "copilot": "https://docs.github.com/en/copilot/reference/hooks-configuration",
+    "copilot": "https://docs.github.com/en/copilot/reference/hooks-reference",
     "kiro": "https://kiro.dev/docs/hooks/",
 }
 

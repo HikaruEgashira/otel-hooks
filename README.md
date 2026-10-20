@@ -20,12 +20,12 @@ uvx otel-hooks
 | Tool | Support | Scope | Setup |
 |------|---------|--------|-------|
 | [Claude Code](https://code.claude.com/docs/en/hooks) | Trace | Global / Project | `otel-hooks enable --tool claude` |
-| [Cursor](https://cursor.com/ja/docs/hooks) | Trace | Global / Project | `otel-hooks enable --tool cursor` |
+| [Cursor](https://cursor.com/docs/hooks) | Trace | Global / Project | `otel-hooks enable --tool cursor` |
 | [Codex CLI](https://developers.openai.com/codex/config-reference) | Trace | Global | `otel-hooks enable --tool codex` |
 | [OpenCode](https://opencode.ai/docs/plugins/) | Trace | Project | `otel-hooks enable --tool opencode` |
 | [Gemini CLI](https://geminicli.com/docs/hooks/) | Trace | Global / Project | `otel-hooks enable --tool gemini` |
-| [Cline](https://docs.cline.bot/customization/hooks) | Trace | Project | `otel-hooks enable --tool cline` |
-| [GitHub Copilot](https://docs.github.com/en/copilot/reference/hooks-configuration) | Metrics Only | Project | `otel-hooks enable --tool copilot` |
+| [Cline](https://docs.cline.bot/sdk/plugins) | Trace | Project | `otel-hooks enable --tool cline` |
+| [GitHub Copilot](https://docs.github.com/en/copilot/reference/hooks-reference) | Metrics Only | Project | `otel-hooks enable --tool copilot` |
 | [Kiro](https://kiro.dev/docs/cli/hooks/) | Metrics Only | Global / Project | `otel-hooks enable --tool kiro` |
 
 ## Usage

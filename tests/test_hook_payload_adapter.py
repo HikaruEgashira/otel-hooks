@@ -78,6 +78,39 @@ class HookPayloadAdapterTest(unittest.TestCase):
         self.assertIsNone(event.transcript_path)
         self.assertEqual(event.session_id, "g1")
 
+    def test_parse_hook_event_for_gemini_documented_base_payload(self) -> None:
+        """Gemini's documented base payload includes hook_event_name (2026-10-20 spec sync)."""
+        base = {
+            "session_id": "g3",
+            "transcript_path": "/tmp/gemini.json",
+            "cwd": "/tmp",
+            "timestamp": "2026-10-20T00:00:00Z",
+        }
+        for extra in (
+            {"hook_event_name": "SessionEnd", "reason": "exit"},
+            {"hook_event_name": "SessionEnd", "reason": "prompt_input_exit"},
+            {"hook_event_name": "AfterAgent", "prompt": "hi", "prompt_response": "ok"},
+            {"hook_event_name": "BeforeTool", "tool_name": "read_file", "tool_input": {}},
+        ):
+            with self.subTest(event=extra["hook_event_name"], reason=extra.get("reason")):
+                event = parse_hook_event({**base, **extra})
+                self.assertIsNotNone(event)
+                self.assertEqual(event.source, "gemini")
+                self.assertEqual(event.session_id, "g3")
+
+    def test_parse_hook_event_keeps_copilot_vscode_session_end(self) -> None:
+        """Copilot VS Code payloads share session_id + timestamp but use other SessionEnd reasons."""
+        payload = {
+            "hook_event_name": "SessionEnd",
+            "session_id": "c1",
+            "timestamp": "2026-10-20T00:00:00Z",
+            "cwd": "/tmp",
+            "reason": "complete",
+        }
+        event = parse_hook_event(payload)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.source, "copilot")
+
     def test_parse_hook_event_for_copilot_metrics_payload(self) -> None:
         payload = {"hook_event_name": "PreToolUse", "tool_name": "bash", "cwd": "/tmp"}
         event = parse_hook_event(payload)

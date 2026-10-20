@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-10-13
+> Snapshot: 2026-10-20
 
 ## Config Location
 
@@ -53,6 +53,7 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 ### Hook Types
 
 - `command` — shell command (`command`, `args`, `async`, `asyncRewake`, `shell`: `bash|powershell`, `onFailure`: `continue|block` (v2.1.295+)); when `args` present uses exec form (no shell)
+- `onFailure: "block"` — a hook failure (can't start, exit code other than 0/2, HTTP non-2xx, timeout, invalid JSON) acts like exit 2 for that event; on PermissionRequest it denies the request; no effect on Stop, SubagentStop, TaskCompleted, TeammateIdle
 - `http` — POST request (`url`, `headers`, `allowedEnvVars`, `onFailure`)
 - `mcp_tool` — MCP tool call (`server`, `tool`, `input` with `${path}` substitution)
 - `prompt` — LLM prompt (`prompt`, `model`)
@@ -68,10 +69,10 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 | UserPromptSubmit | Yes (exit 2) | — |
 | UserPromptExpansion | Yes (exit 2) | command_name |
 | PreToolUse | Yes (exit 2) | tool_name |
-| PermissionRequest | Yes (exit 2) | tool_name |
+| PermissionRequest | No (exit 2 ignored; deny via `hookSpecificOutput.decision`) | tool_name |
 | PermissionDenied | No | tool_name |
-| PostToolUse | Yes (exit 2) | tool_name |
-| PostToolUseFailure | Yes (exit 2) | tool_name |
+| PostToolUse | No (exit 2 shows stderr to Claude; tool already ran) | tool_name |
+| PostToolUseFailure | No (exit 2 shows stderr to Claude; tool already failed) | tool_name |
 | PostToolBatch | Yes (exit 2) | — |
 | Notification | No | notification_type: `permission_prompt\|idle_prompt\|auth_success\|elicitation_dialog\|elicitation_url_dialog\|elicitation_complete\|elicitation_response\|agent_needs_input\|agent_completed\|quota_auto_resume_fired\|quota_auto_resume_stale\|quota_auto_resume_disabled` |
 | MessageDisplay | No | — |
@@ -95,6 +96,8 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 | Elicitation | Yes (exit 2) | mcp_server name |
 | ElicitationResult | Yes (exit 2) | mcp_server name |
 | SessionEnd | No | reason: `clear\|resume\|logout\|prompt_input_exit\|other` (`bypass_permissions_disabled` removed v2.1.234) |
+
+PreToolUse, PostToolUse and PermissionRequest do not fire for the `EndConversation` tool.
 
 ## Common Input Fields (all events)
 
@@ -182,6 +185,7 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 - `tool_name`: string
 - `tool_input`: object (tool-specific)
 - `tool_response`: object (tool's structured output)
+- `tool_response.bashEditDiff`: object (Bash only, v2.1.269+, public beta, best effort; `{ changedFiles[], files[], moreFiles, unavailable?, skipped?, shared? }`)
 - `tool_use_id`: string
 - `duration_ms`: number (optional)
 - `mcp_server`: `{ name, source }` (MCP tools only)
@@ -410,7 +414,7 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 
 ### TaskCreated / TaskCompleted / PreCompact / ConfigChange
 
-- `decision`: `"block"` (optional; TaskCompleted uses exit 2 or `continue: false`)
+- `decision`: `"block"` (optional; TaskCompleted uses exit 2 or `continue: false`; TaskCreated ignores `continue: false`)
 - `reason`: string
 
 ### Stop / SubagentStop (output)
@@ -487,6 +491,9 @@ Permission update entry `type`: `addRules|replaceRules|removeRules|setMode|addDi
 - `onFailure` handler field: v2.1.295+
 - `scratchpad_dir` field: v2.1.257+
 - `cloud_credential_error` in `StopFailure`: v2.1.267+
+- `tool_response.bashEditDiff` (Bash PostToolUse): v2.1.269+
+- Multi-line async hook JSON output: v2.1.295+
+- `CLAUDE_ENV_FILE` variables applied to PowerShell tool commands: v2.1.296+
 
 ## Constraints
 

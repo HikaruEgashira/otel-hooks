@@ -3,7 +3,7 @@
 Works with both GitHub Copilot CLI and VS Code Copilot agent.
 
 Reference:
-  - https://docs.github.com/en/copilot/reference/hooks-configuration
+  - https://docs.github.com/en/copilot/reference/hooks-reference
 """
 
 from pathlib import Path
