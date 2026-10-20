@@ -2,7 +2,7 @@
 
 > Source: https://docs.cline.bot/sdk/plugins (also https://docs.cline.bot/sdk/hooks)
 > (Original URL https://docs.cline.bot/customization/hooks is now a stub pointing to the SDK Plugins page)
-> Snapshot: 2026-10-13
+> Snapshot: 2026-10-20
 
 ## Migration Note
 
@@ -49,17 +49,50 @@ const plugin: AgentPlugin = {
 };
 ```
 
-| Hook key | Context fields documented |
-|----------|---------------------------|
-| `beforeRun` | (none documented) |
-| `afterRun` | `result.usage.inputTokens`, `result.usage.outputTokens` (may be undefined) |
-| `beforeModel` | (none documented; used to adjust system prompt/context) |
-| `afterModel` | (not documented) |
-| `beforeTool` | `toolCall.name`, `input` (a thrown error counts as a tool failure) |
-| `afterTool` | (not documented) |
-| `onEvent` | (not documented) |
+All hooks receive a context with the current runtime `snapshot` (agent id, conversation id, iteration, messages, usage).
 
-Return/output fields: not documented upstream.
+| Hook key | When | Context fields | Can return |
+|----------|------|----------------|------------|
+| `beforeRun` | Before a run starts | `snapshot` | `stop` + `reason` to end the run; `appendContext` (text the model sees on its first request) |
+| `afterRun` | After a run ends | `result` (`result.usage.inputTokens` / `outputTokens`, may be undefined) | Nothing (metrics, notifications, cleanup) |
+| `beforeModel` | Before each model request | `request` | `messages`, `tools`, or `options` to change the request; `stop` + `reason` |
+| `afterModel` | After each model response | `assistantMessage`, `finishReason` | `stop` + `reason` |
+| `beforeTool` | Before a tool runs | `tool`, `toolCall` (`toolCall.name`), `input` | `skip` + `reason` to block the call (reason goes back to the model); `input` to replace the input; `policy` (e.g. `{ autoApprove: false }`) to require approval; `appendContext`; `stop` |
+| `afterTool` | After a tool runs | `result`, timing | `result` to replace the result; `appendContext`; `stop` + `reason` |
+| `onEvent` | For runtime events | runtime event | Nothing |
+
+(Context/return fields documented as of 2026-10-20.)
+
+## Hook Failure Handling
+
+Each plugin hook call has a 3-second timeout. If a hook throws, rejects, or times out, the session's `hookErrorMode` decides what happens:
+
+| `hookErrorMode` | Behavior |
+|-----------------|----------|
+| `"ignore"` (default) | Failure is recorded and reported; the run continues as if the hook returned nothing |
+| `"throw"` | Error is rethrown and the run fails |
+
+A hook that keeps failing marks its plugin `degraded`, then `failed` after five failures in a row.
+
+## Plugin Runtime
+
+- By default each plugin runs in its own worker thread, one per session, inside the host's runtime.
+- Opt-in `sandbox` mode (previous per-session subprocess sandbox) via `CLINE_PLUGIN_MODE` (or `mode` on `resolveAndLoadAgentPlugins`).
+- Plugin `console.log` and stdout output are discarded (cannot corrupt `--json` output or a JSON-RPC stream); use `ctx.logger`.
+- Values passed to and returned from a plugin cross a thread boundary and must be plain data; functions are dropped.
+
+## Setup Context and Plugin Status
+
+`setup(api, ctx)` context: `ctx.cwd`, `ctx.session?.sessionId`, `ctx.emitEvent(name, payload)`, `ctx.workspaceInfo`, `ctx.onDispose(fn)`, `ctx.logger`.
+
+| Stage | Timeout |
+|-------|---------|
+| Import | 4 s (`CLINE_PLUGIN_IMPORT_TIMEOUT_MS`) |
+| `setup()` | 4 s |
+| Hook | 3 s (plugin becomes `degraded`; run continues unless `hookErrorMode` is `"throw"`) |
+| Tool | 60 s, or the tool's `timeoutMs` |
+
+Plugin status values: `loading`, `ready`, `degraded`, `failed`, `disabled`.
 
 ## Plugin Locations / Config
 
@@ -68,14 +101,17 @@ Return/output fields: not documented upstream.
 | Global | `~/.cline/plugins/` (installed sources under `_installed/{npm,git,remote,local}/`) |
 | Project | `.cline/plugins/` in the repo root |
 | SDK session config | `pluginPaths` (absolute module paths exporting an `AgentPlugin`), `extensions` (plugin objects) |
-| CLI | `cline plugin install <source>` (file URL, npm, git, local path); `--cwd <path>` installs to `<path>/.cline/plugins` |
+| CLI | `cline plugin install <source>` (file URL, npm, git, local path); `--cwd <path>` installs to `<path>/.cline/plugins`; `--force` replaces an existing install; `--json` |
 | Package plugins | `package.json` `cline.plugins` array with `paths` and `capabilities` |
+| Session plugin policy | `plugins` in session config, shaped like `toolPolicies`: `"*"` sets the default, named entries override per plugin (e.g. `{ "*": { enabled: false }, "code-review": { enabled: true } }`); plugins are enabled unless a policy turns them off |
 
 Programmatic registration: `cline.start({ config: { extensions: [plugin] } })`, or pass absolute module paths through `config.pluginPaths`.
 
 Applies to Cline SDK, CLI and Kanban (not the VSCode/JetBrains extensions).
 
-## Hook Configuration Fields (Hook Policies)
+## Hook Configuration Fields (Hook Policies) — legacy
+
+Not documented on any current upstream page as of 2026-10-20 (superseded by the fixed timeouts and `hookErrorMode` above); retained from the 2026-06-30 snapshot.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -90,7 +126,9 @@ Applies to Cline SDK, CLI and Kanban (not the VSCode/JetBrains extensions).
 Defaults are not documented on the current upstream page; the values above are retained from the 2026-06-30 snapshot.
 Use `fail_closed` for policy-enforcement hooks where bypassing the hook is unsafe.
 
-## Hook Events (15 total)
+## Hook Events (15 total) — legacy
+
+Not listed on current upstream pages as of 2026-10-20. Current upstream documents only the 7 `hooks` keys above; runtime events reach plugins via `onEvent`, with no event name list documented. Retained from the 2026-06-30 snapshot for backward compatibility of the `hook_event.py` mappings.
 
 ### Lifecycle Events
 

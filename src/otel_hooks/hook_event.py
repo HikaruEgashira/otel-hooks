@@ -140,6 +140,21 @@ def _detect_source(payload: dict[str, Any]) -> str:
         # Old camelCase Kiro events kept for backwards compatibility
         if event_name in _KIRO_SPECIFIC or event_name in ("userPromptSubmit", "stop", "agentSpawn"):
             return "kiro"
+        # Gemini payloads also carry hook_event_name (2026-10-20 spec sync).
+        # Copilot's VS Code format shares session_id + timestamp, so match on
+        # Gemini-only event names or Gemini-only SessionEnd reasons.
+        _GEMINI_SPECIFIC = frozenset({
+            "BeforeAgent", "AfterAgent", "BeforeModel", "AfterModel",
+            "BeforeToolSelection", "BeforeTool", "AfterTool", "PreCompress",
+        })
+        _GEMINI_SESSION_END_REASONS = frozenset({
+            "exit", "clear", "logout", "prompt_input_exit", "other",
+        })
+        if "session_id" in payload and "timestamp" in payload:
+            if event_name in _GEMINI_SPECIFIC:
+                return "gemini"
+            if event_name == "SessionEnd" and payload.get("reason") in _GEMINI_SESSION_END_REASONS:
+                return "gemini"
         return "copilot"
     if "sessionId" in payload or "transcriptPath" in payload:
         return "claude-code"

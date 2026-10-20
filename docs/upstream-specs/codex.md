@@ -3,7 +3,7 @@
 > Source: https://learn.chatgpt.com/docs/config-file/config-reference
 > (Formerly https://developers.openai.com/codex/config-reference — 308 permanent redirect as of 2026-07-21)
 > Hooks guide: https://learn.chatgpt.com/docs/hooks (formerly https://developers.openai.com/codex/hooks — 308 redirect)
-> Snapshot: 2026-10-13
+> Snapshot: 2026-10-20
 
 ## Config Location
 
@@ -26,6 +26,7 @@ Admin-enforced hook settings in `requirements.toml`:
 - `hooks.managed_dir` (macOS/Linux): absolute path to managed hook scripts
 - `hooks.windows_managed_dir` (Windows): absolute path to managed hook scripts
 - `allow_managed_hooks_only` (boolean): when `true`, user/project/session/plugin hooks are skipped; only managed hooks run (added 2026-10-13)
+- Cloud orchestration (Work Cloud with local access): where enabled, only admin-managed `mcp_tool` hooks from requirements.toml run on the cloud coordinator for supported lifecycle and tool events. Command/prompt/agent handlers, hooks from local configuration/plugins/local directories, environment-scoped hooks, and `SessionEnd` MCP hooks are unsupported there; a PreToolUse callback error, timeout, or malformed response can fail the hook without blocking the tool (added 2026-10-20)
 
 ## Hooks Feature Status
 
@@ -42,10 +43,12 @@ Admins can force hooks off via `[features].hooks = false` in `requirements.toml`
 
 ## Hooks Config Schema
 
-Hooks can be defined inline in `config.toml` or in `.codex/hooks.json` using the same schema:
+Hooks can be defined inline in `config.toml` (`[[hooks.<EventName>]]` / `[[hooks.<EventName>.hooks]]`) or in `.codex/hooks.json` (wrapped in a top-level `hooks` object; optional top-level `description` is metadata only and doesn't change which hooks run):
 
 ```json
 {
+  "description": "string (optional metadata)",
+  "hooks": {
   "<EventName>": [
     {
       "matcher": "string",
@@ -70,6 +73,7 @@ Hooks can be defined inline in `config.toml` or in `.codex/hooks.json` using the
       ]
     }
   ]
+  }
 }
 ```
 
@@ -126,11 +130,11 @@ Note: the `requirements.toml` `hooks.<Event>` reference row lists 11 events (omi
 
 | Event | Matcher filters | Extra fields |
 |-------|-----------------|--------------|
-| `SessionStart` | `source` | `source`: startup/resume/clear/compact |
+| `SessionStart` | `source` | `source`: startup/resume/clear/compact/fork (fork added 2026-10-20; a resume with supplied history still reports `resume`) |
 | `SessionEnd` | `reason` | `reason`: currently always `other` |
 | `SubagentStart` | `agent_type` | `turn_id`, `agent_id`, `agent_type` |
 | `SubagentStop` | `agent_type` | `turn_id`, `agent_id`, `agent_type`, `agent_transcript_path`, `stop_hook_active`, `last_assistant_message` |
-| `PreToolUse` | `tool_name` (Bash, apply_patch/Edit/Write, mcp__*) | `turn_id`, `tool_name`, `tool_use_id`, `tool_input` |
+| `PreToolUse` | `tool_name` (Bash [incl. unified exec `exec_command`], apply_patch/Edit/Write, mcp__*, other local function tools e.g. `update_plan`; `spawn_agent` also matches `Agent`) | `turn_id`, `tool_name`, `tool_use_id`, `tool_input` |
 | `PermissionRequest` | `tool_name` | `turn_id`, `tool_name`, `tool_input` (`tool_input.description` optional) |
 | `PostToolUse` | `tool_name` | `turn_id`, `tool_name`, `tool_use_id`, `tool_input`, `tool_response` |
 | `PreCompact` / `PostCompact` | `trigger` | `turn_id`, `trigger`: manual/auto |
@@ -138,12 +142,17 @@ Note: the `requirements.toml` `hooks.<Event>` reference row lists 11 events (omi
 | `Stop` | (ignored) | `turn_id`, `stop_hook_active`, `last_assistant_message` |
 | `Interrupt` | (ignored) | `turn_id`, `permission_mode` (main thread only, not subagents) |
 
+- `tool_input`: Bash/apply_patch use `tool_input.command`; MCP and other local function tools send their arguments.
+- PostToolUse `tool_response`: MCP call result, or the model-facing output for other local function tools.
+- Hosted tools (e.g. WebSearch) don't use the local function-tool hook path; PreToolUse/PostToolUse never fire for them. (Tool coverage expanded 2026-10-20)
+
 ## Output Fields
 
 - Common (SessionStart, PreCompact, PostCompact, UserPromptSubmit, SubagentStop, Stop): `continue`, `stopReason`, `systemMessage`, `suppressOutput` (parsed, not implemented).
 - `hookSpecificOutput.{hookEventName, additionalContext}`: SessionStart, SubagentStart, PreToolUse, PostToolUse, UserPromptSubmit.
-- PreToolUse: `permissionDecision: "deny"` + `permissionDecisionReason`, or `"allow"` + `updatedInput`; legacy `{decision:"block", reason}`; exit code 2 + stderr.
-- PermissionRequest: `hookSpecificOutput.decision.behavior` = `allow`/`deny` (+ `message`); any deny wins.
+- PreToolUse: `permissionDecision: "deny"` + `permissionDecisionReason`, or `"allow"` + `updatedInput`; legacy `{decision:"block", reason}`; exit code 2 + stderr. `systemMessage` supported; `permissionDecision: "ask"`, legacy `decision: "approve"`, `continue`, `stopReason`, `suppressOutput` are parsed but unsupported.
+- PermissionRequest: `hookSpecificOutput.decision.behavior` = `allow`/`deny` (+ `message`); any deny wins. `systemMessage` supported; `continue`/`stopReason`/`suppressOutput` unsupported; `updatedInput`/`updatedPermissions`/`interrupt` are reserved and fail closed.
+- PostToolUse: also `systemMessage`, `continue: false` (stops normal processing of the original tool result after the command ran), `stopReason`; `updatedMCPToolOutput`/`suppressOutput` are parsed but unsupported (added 2026-10-20).
 - PostToolUse / UserPromptSubmit / Stop / SubagentStop: `{decision:"block", reason}` or exit code 2.
 - Stop/SubagentStop require JSON on stdout; Interrupt accepts only optional `systemMessage`.
 

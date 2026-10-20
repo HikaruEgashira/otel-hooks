@@ -1,7 +1,7 @@
 """Cursor tool configuration (.cursor/hooks.json).
 
 Reference:
-  - https://cursor.com/ja/docs/hooks
+  - https://cursor.com/docs/hooks
 """
 
 from pathlib import Path

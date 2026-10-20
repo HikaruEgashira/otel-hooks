@@ -7,14 +7,14 @@
 
 | File | Source | Snapshot |
 |------|--------|----------|
-| [claude.md](claude.md) | https://code.claude.com/docs/en/hooks | 2026-10-13 |
-| [cursor.md](cursor.md) | https://cursor.com/ja/docs/hooks | 2026-10-13 |
-| [codex.md](codex.md) | https://learn.chatgpt.com/docs/config-file/config-reference | 2026-10-13 |
+| [claude.md](claude.md) | https://code.claude.com/docs/en/hooks | 2026-10-20 |
+| [cursor.md](cursor.md) | https://cursor.com/ja/docs/hooks | 2026-10-20 |
+| [codex.md](codex.md) | https://learn.chatgpt.com/docs/config-file/config-reference | 2026-10-20 |
 | [opencode.md](opencode.md) | https://opencode.ai/docs/plugins/ | 2026-10-13 |
-| [gemini.md](gemini.md) | https://geminicli.com/docs/hooks/ | 2026-06-16 |
-| [cline.md](cline.md) | https://docs.cline.bot/sdk/plugins | 2026-10-13 |
-| [copilot.md](copilot.md) | https://docs.github.com/en/copilot/reference/hooks-configuration | 2026-10-13 |
-| [kiro.md](kiro.md) | https://kiro.dev/docs/hooks/ | 2026-10-13 |
+| [gemini.md](gemini.md) | https://geminicli.com/docs/hooks/ | 2026-10-20 |
+| [cline.md](cline.md) | https://docs.cline.bot/sdk/plugins | 2026-10-20 |
+| [copilot.md](copilot.md) | https://docs.github.com/en/copilot/reference/hooks-reference | 2026-10-20 |
+| [kiro.md](kiro.md) | https://kiro.dev/docs/hooks/ | 2026-10-20 |
 
 ## 検査対象
 
