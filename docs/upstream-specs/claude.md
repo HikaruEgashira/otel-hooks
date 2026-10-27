@@ -494,7 +494,7 @@ Permission update entry `type`: `addRules|replaceRules|removeRules|setMode|addDi
 - `tool_response.bashEditDiff` (Bash PostToolUse): v2.1.269+
 - Multi-line async hook JSON output: v2.1.295+
 - `CLAUDE_ENV_FILE` variables applied to PowerShell tool commands: v2.1.296+
-- Per-skill-source 1,024-hook limit and 16,384-character total matcher limit: v2.1.304+
+- Per-skill-source, per-session 1,024-hook limit and 16,384-character total matcher limit: v2.1.304+
 
 ## Constraints
 
@@ -503,4 +503,4 @@ Permission update entry `type`: `addRules|replaceRules|removeRules|setMode|addDi
 - Identical handlers deduplicated by command/URL
 - JSON-only stdout on exit 0
 - `OTEL_*` exporter variables are removed from all subprocess environments
-- Each skill source limited to 1,024 hooks; matchers total at most 16,384 characters (v2.1.304+)
+- Each skill source (project, personal skills folder, each plugin) limited per session to 1,024 hooks; their matchers total at most 16,384 characters, a matcher counting once per hook under it (v2.1.304+)
