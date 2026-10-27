@@ -3,7 +3,7 @@
 > Source: https://learn.chatgpt.com/docs/config-file/config-reference
 > (Formerly https://developers.openai.com/codex/config-reference — 308 permanent redirect as of 2026-07-21)
 > Hooks guide: https://learn.chatgpt.com/docs/hooks (formerly https://developers.openai.com/codex/hooks — 308 redirect)
-> Snapshot: 2026-10-20
+> Snapshot: 2026-10-27
 
 ## Config Location
 
@@ -100,7 +100,7 @@ The per-handler `additionalContextLimit` parameter (default: 2500 tokens) contro
 | Event | Description |
 |-------|-------------|
 | `SessionStart` | Session begins |
-| `SessionEnd` | Session terminates (added 2026-08-04) |
+| `SessionEnd` | Session terminates (added 2026-08-04); main thread only, not subagents |
 | `UserPromptSubmit` | User submits a prompt |
 | `PreToolUse` | Before tool execution |
 | `PermissionRequest` | Permission dialog appears |
@@ -111,6 +111,8 @@ The per-handler `additionalContextLimit` parameter (default: 2500 tokens) contro
 | `SubagentStop` | Spawned agent shutdown |
 | `Stop` | Assistant finishes responding |
 | `Interrupt` | Session interrupted by user (added 2026-09-22) |
+
+`SessionEnd` fires when an open conversation is archived or deleted, when Codex closes normally, or after a conversation has been idle and not open in any connected client for 30 minutes. Switching away from a conversation or `thread/unsubscribe` does not end the session right away. (documented 2026-10-27)
 
 Note: the `requirements.toml` `hooks.<Event>` reference row lists 11 events (omits `Interrupt`); the `config.toml` row and hooks guide list all 12.
 
@@ -144,13 +146,15 @@ Note: the `requirements.toml` `hooks.<Event>` reference row lists 11 events (omi
 
 - `tool_input`: Bash/apply_patch use `tool_input.command`; MCP and other local function tools send their arguments.
 - PostToolUse `tool_response`: MCP call result, or the model-facing output for other local function tools.
+- Unified exec: a later `write_stdin` poll can deliver the original command's `PostToolUse` when that command finishes (matched as `Bash`). (documented 2026-10-27)
 - Hosted tools (e.g. WebSearch) don't use the local function-tool hook path; PreToolUse/PostToolUse never fire for them. (Tool coverage expanded 2026-10-20)
 
 ## Output Fields
 
 - Common (SessionStart, PreCompact, PostCompact, UserPromptSubmit, SubagentStop, Stop): `continue`, `stopReason`, `systemMessage`, `suppressOutput` (parsed, not implemented).
 - `hookSpecificOutput.{hookEventName, additionalContext}`: SessionStart, SubagentStart, PreToolUse, PostToolUse, UserPromptSubmit.
-- PreToolUse: `permissionDecision: "deny"` + `permissionDecisionReason`, or `"allow"` + `updatedInput`; legacy `{decision:"block", reason}`; exit code 2 + stderr. `systemMessage` supported; `permissionDecision: "ask"`, legacy `decision: "approve"`, `continue`, `stopReason`, `suppressOutput` are parsed but unsupported.
+- PreToolUse: `permissionDecision: "deny"` + `permissionDecisionReason`, or `"allow"` + `updatedInput`; legacy `{decision:"block", reason}`; exit code 2 + stderr. `systemMessage` supported; `permissionDecision: "ask"`, legacy `decision: "approve"`, `continue`, `stopReason`, `suppressOutput` are parsed but unsupported: Codex marks the hook run as failed, reports the error, and continues the tool call.
+- SubagentStart: accepts `systemMessage`/`additionalContext`; `continue: false` is parsed for compatibility but does not stop the subagent from starting.
 - PermissionRequest: `hookSpecificOutput.decision.behavior` = `allow`/`deny` (+ `message`); any deny wins. `systemMessage` supported; `continue`/`stopReason`/`suppressOutput` unsupported; `updatedInput`/`updatedPermissions`/`interrupt` are reserved and fail closed.
 - PostToolUse: also `systemMessage`, `continue: false` (stops normal processing of the original tool result after the command ran), `stopReason`; `updatedMCPToolOutput`/`suppressOutput` are parsed but unsupported (added 2026-10-20).
 - PostToolUse / UserPromptSubmit / Stop / SubagentStop: `{decision:"block", reason}` or exit code 2.
