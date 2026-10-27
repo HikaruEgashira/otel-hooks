@@ -1,7 +1,7 @@
 # Claude Code Hooks Specification
 
 > Source: https://code.claude.com/docs/en/hooks
-> Snapshot: 2026-10-20
+> Snapshot: 2026-10-27
 
 ## Config Location
 
@@ -74,7 +74,7 @@ Hook entries merge across settings levels. `allowManagedHooksOnly` (managed sett
 | PostToolUse | No (exit 2 shows stderr to Claude; tool already ran) | tool_name |
 | PostToolUseFailure | No (exit 2 shows stderr to Claude; tool already failed) | tool_name |
 | PostToolBatch | Yes (exit 2) | — |
-| Notification | No | notification_type: `permission_prompt\|idle_prompt\|auth_success\|elicitation_dialog\|elicitation_url_dialog\|elicitation_complete\|elicitation_response\|agent_needs_input\|agent_completed\|quota_auto_resume_fired\|quota_auto_resume_stale\|quota_auto_resume_disabled` |
+| Notification | No | notification_type: `permission_prompt\|idle_prompt\|auth_success\|elicitation_dialog\|elicitation_url_dialog\|elicitation_complete\|elicitation_response\|agent_needs_input\|agent_completed\|quota_auto_resume_fired\|quota_auto_resume_stale\|quota_auto_resume_disabled\|plugin_notification` |
 | MessageDisplay | No | — |
 | SubagentStart | No | agent_type |
 | SubagentStop | Yes (exit 2) | agent_type |
@@ -208,7 +208,7 @@ PreToolUse, PostToolUse and PermissionRequest do not fire for the `EndConversati
 
 - `message`: string
 - `title`: string (optional)
-- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_url_dialog|elicitation_complete|elicitation_response|agent_needs_input|agent_completed|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled` (`quota_auto_resume_*` v2.1.234+)
+- `notification_type`: `permission_prompt|idle_prompt|auth_success|elicitation_dialog|elicitation_url_dialog|elicitation_complete|elicitation_response|agent_needs_input|agent_completed|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled|plugin_notification` (`quota_auto_resume_*` v2.1.234+; `plugin_notification` raised by a mod via `$.ui.notify`, `title` is the mod name unless set)
 
 ### SubagentStart
 
@@ -494,6 +494,7 @@ Permission update entry `type`: `addRules|replaceRules|removeRules|setMode|addDi
 - `tool_response.bashEditDiff` (Bash PostToolUse): v2.1.269+
 - Multi-line async hook JSON output: v2.1.295+
 - `CLAUDE_ENV_FILE` variables applied to PowerShell tool commands: v2.1.296+
+- Per-skill-source, per-session 1,024-hook limit and 16,384-character total matcher limit: v2.1.304+
 
 ## Constraints
 
@@ -502,3 +503,4 @@ Permission update entry `type`: `addRules|replaceRules|removeRules|setMode|addDi
 - Identical handlers deduplicated by command/URL
 - JSON-only stdout on exit 0
 - `OTEL_*` exporter variables are removed from all subprocess environments
+- Each skill source (project, personal skills folder, each plugin) limited per session to 1,024 hooks; their matchers total at most 16,384 characters, a matcher counting once per hook under it (v2.1.304+)

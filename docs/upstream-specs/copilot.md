@@ -2,7 +2,7 @@
 
 > Source: https://docs.github.com/en/copilot/reference/hooks-reference
 > (Formerly https://docs.github.com/en/copilot/reference/hooks-configuration — 301 redirect as of 2026-10-20; page title now "GitHub Copilot hooks reference")
-> Snapshot: 2026-10-20
+> Snapshot: 2026-10-27
 
 ## Config Location
 
@@ -28,6 +28,7 @@ Load order (CLI): Policy files → Repository `.github/hooks/*.json` → User `~
 - Frontmatter `hooks` accepts runtime (`postToolUse`) or alias (`PostToolUse`) event names.
 - `command` is the fallback; `windows`, `linux`, `osx` override it per platform. Paths resolve from the repository root.
 - A subagent's scoped `Stop` (`agentStop`) hooks run at `SubagentStop`; after eight consecutive scoped blocks, further blocks are ignored.
+- Trust: repository and inherited-agent hooks require workspace admission; hook-disable settings, enterprise restrictions, and timeouts still apply (added 2026-10-27).
 - Remote or organization-hosted agent definitions do not run scoped hooks.
 
 Malformed items: in directory-loaded files only the bad item is dropped; invalid JSON, bad `version`, or a non-array event list rejects the whole file. Inline `settings.json` hooks are strict.
@@ -516,5 +517,6 @@ Note: as of 2026-09-29 the upstream "Tool names for hook matching" table lists o
 - Built-in `general-purpose` agent does not emit `subagentStart` / `subagentStop`
 - `/clear` (CLI) fires `sessionEnd` with `reason: "user_exit"` as a detached background hook
 - Sandboxed CLI sessions: repo, user, and plugin command hooks run inside the sandbox; policy hooks run on the host
-- Hook output bounded at **10 MiB** per invocation; `additionalContext` capped at **10 KB** when multiple hooks return it
+- Hook output bounded at **10 MiB** per invocation; `postToolUse` `additionalContext` capped at **10 KB** when multiple hooks return it
+- `sessionStart` / `subagentStart`: multiple hooks' non-empty `additionalContext` strings are joined in execution order with `"\n\n"`; empty/whitespace-only strings don't erase accumulated context; the combined string is bounded by the 10 MiB hook-output limit (an over-limit contribution is dropped and a warning raised) (added 2026-10-27)
 - HTTP hooks require HTTPS by default for permission events; HTTP allowed for localhost only with `COPILOT_HOOK_ALLOW_LOCALHOST=1`
