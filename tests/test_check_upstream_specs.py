@@ -86,6 +86,19 @@ class UpstreamSpecCheckerTest(unittest.TestCase):
                 self.assertTrue(checker.extract_events_from_spec(spec_path, tool))
                 self.assertTrue(checker.extract_json_fields_from_spec(spec_path))
 
+    def test_html_nested_event_headings_exclude_other_sections(self) -> None:
+        html = """
+        <h2>Hook Events</h2>
+        <h3>SessionStart</h3><p>Begins a session.</p>
+        <h3>Stop</h3><p>Ends a session.</p>
+        <h2>Configuration</h2>
+        <h3>Timeout</h3><p>Maximum duration.</p>
+        """
+        self.assertEqual(
+            checker.extract_events_from_html(html, "claude"),
+            {"SessionStart", "Stop"},
+        )
+
     def test_html_fixture_extracts_events_and_payload_fields(self) -> None:
         html = """
         <h2>Hook Events</h2>

@@ -122,7 +122,7 @@ def _html_to_text(raw: str) -> str:
     text = raw
 
     def _heading(match: re.Match[str]) -> str:
-        level = len(match.group(1))
+        level = int(match.group(1))
         title = re.sub(r"<[^>]+>", " ", match.group(2))
         return f"\n{'#' * level} {html_lib.unescape(title).strip()}\n"
 
