@@ -119,7 +119,10 @@ def _html_to_text(raw: str) -> str:
     if "<" not in raw:
         return raw
 
-    text = raw
+    # Page metadata and styling are not part of the documented hook surface.
+    text = re.sub(r"<!--.*?-->", " ", raw, flags=re.DOTALL)
+    text = re.sub(r"<(script|style)\b[^>]*>.*?</\1\s*>", " ", text,
+                  flags=re.IGNORECASE | re.DOTALL)
 
     def _heading(match: re.Match[str]) -> str:
         level = int(match.group(1))
