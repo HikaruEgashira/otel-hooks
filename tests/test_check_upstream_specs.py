@@ -8,26 +8,30 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "tests" / "fixtures" / "upstream-specs"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import check_upstream_specs as checker  # noqa: E402
 
 
-# A small, tool-shaped event surface.  Each tuple is
-# (existing event, another existing event, newly added upstream event).
-TOOL_EVENTS = {
-    "claude": ("SessionStart", "Stop", "NewClaudeEvent"),
-    "cursor": ("sessionStart", "stop", "newCursorEvent"),
-    "codex": ("SessionStart", "Stop", "NewCodexEvent"),
-    "opencode": ("session.created", "session.idle", "session.archived"),
-    "gemini": ("SessionStart", "SessionEnd", "NewGeminiEvent"),
-    "cline": ("session_start", "run_end", "new_cline_event"),
-    "copilot": ("sessionStart", "sessionEnd", "newCopilotEvent"),
-    "kiro": ("SessionStart", "Stop", "NewKiroEvent"),
+BASE_FIELDS = ("session_id", "hook_event_name")
+EVENT_FIXTURES = {
+    "claude": ("NewClaudeEvent", "<h3>NewClaudeEvent</h3>", "<h3>Stop</h3>"),
+    "cursor": ("newCursorEvent", "<h4>newCursorEvent</h4>", "<h4>sessionStart</h4>"),
+    "gemini": ("NewGeminiEvent", "<tr><td><code>NewGeminiEvent</code></td><td>new</td></tr>",
+               "<tr><td><code>AfterTool</code></td><td>A tool completes</td></tr>"),
+    "opencode": ("session.restored", "<li><code>session.restored</code></li>",
+                 "<li><code>tool.execute.before</code></li>"),
+    "copilot": ("newCopilotEvent", "<tr><td><code>newCopilotEvent</code></td><td>new</td></tr>",
+                "<tr><td><code>sessionStart</code></td><td>A new session starts</td></tr>"),
 }
-
-BASE_FIELDS = ("session_id", "tool_name")
+PAYLOAD_FIXTURES = {
+    "claude": ("new_claude_field", "<tr><td><code>new_claude_field</code></td><td>new</td></tr>",
+               "<tr><td><code>hook_event_name</code></td><td>Firing event</td></tr>"),
+    "cursor": ("newCursorField", ',"newCursorField":"x"', ',"generation_id":"g"'),
+    "copilot": ("newField", "\n  newField?: string;", "  sessionId: string;"),
+}
 
 
 def _event_table(events: tuple[str, ...] | list[str]) -> str:
@@ -39,7 +43,7 @@ def _event_table(events: tuple[str, ...] | list[str]) -> str:
 def _payload_block(fields: tuple[str, ...] | list[str]) -> str:
     payload = {field: "string" for field in fields}
     return "\n".join([
-        "## Payload Fields",
+        "## Common Input Fields",
         "",
         "```json",
         json.dumps(payload, indent=2),
@@ -52,7 +56,10 @@ def _spec(events: tuple[str, ...] | list[str], fields: tuple[str, ...] | list[st
 
 
 def _upstream(events: tuple[str, ...] | list[str], fields: tuple[str, ...] | list[str]) -> str:
-    return f"# Upstream fixture\n\n{_event_table(events)}\n\n{_payload_block(fields)}\n"
+    rows = ["## Common Input Fields", "", "| Field | Description |", "|---|---|"]
+    rows.extend(f"| `{field}` | Fixture field |" for field in fields)
+    payload = "\n".join(rows)
+    return f"# Upstream fixture\n\n{_event_table(events)}\n\n{payload}\n"
 
 
 class UpstreamSpecCheckerTest(unittest.TestCase):
@@ -76,15 +83,26 @@ class UpstreamSpecCheckerTest(unittest.TestCase):
             ):
                 return checker.check_tool(tool)
 
-    def test_event_patterns_cover_every_supported_tool(self) -> None:
-        self.assertEqual(set(checker.EVENT_PATTERNS), set(checker.UPSTREAM_URLS))
-
-    def test_snapshots_expose_an_event_and_payload_surface_for_every_tool(self) -> None:
+    def test_every_tool_is_checked_or_explicitly_unsupported(self) -> None:
         for tool in checker.UPSTREAM_URLS:
             with self.subTest(tool=tool):
-                spec_path = checker.SPECS_DIR / f"{tool}.md"
-                self.assertTrue(checker.extract_events_from_spec(spec_path, tool))
-                self.assertTrue(checker.extract_json_fields_from_spec(spec_path))
+                fixture = (FIXTURES / f"{tool}.html").read_text()
+                events = checker._event_surface(fixture, tool)
+                payload = checker._payload_surface(fixture, tool)
+                self.assertTrue(events.values or events.reason)
+                self.assertTrue(payload.values or payload.reason)
+                if tool in EVENT_FIXTURES:
+                    self.assertTrue(events.values, events.reason)
+                else:
+                    self.assertIsNone(events.values)
+                    self.assertTrue(events.reason)
+                if tool in PAYLOAD_FIXTURES:
+                    self.assertTrue(payload.values, payload.reason)
+                    if tool in {"claude", "cursor"}:
+                        self.assertIn("event-specific", payload.reason)
+                else:
+                    self.assertIsNone(payload.values)
+                    self.assertTrue(payload.reason)
 
     def test_html_nested_event_headings_exclude_other_sections(self) -> None:
         html = """
@@ -107,8 +125,12 @@ class UpstreamSpecCheckerTest(unittest.TestCase):
           <tr><td><code>SessionStart</code></td><td>start</td></tr>
           <tr><td><code>NewEvent</code></td><td>new</td></tr>
         </table>
-        <h2>Per-Event Input</h2>
-        <pre><code>{"session_id": "string", "new_field": 1}</code></pre>
+        <h2>Hook input and output</h2>
+        <h3>Common input fields</h3>
+        <table><tr><th>Field</th><th>Description</th></tr>
+          <tr><td><code>session_id</code></td><td>Current session</td></tr>
+          <tr><td><code>new_field</code></td><td>New field</td></tr>
+        </table>
         """
         self.assertEqual(
             checker.extract_events_from_html(html, "claude"),
@@ -125,7 +147,10 @@ class UpstreamSpecCheckerTest(unittest.TestCase):
         <style>body:after { content: '{"theme_id":1}'; }</style>
         <!-- <h2>Hook Events</h2><h3>GhostEvent</h3>{"comment_id":1} -->
         <h2>Hook Events</h2><h3>SessionStart</h3>
-        <h2>Payload</h2><pre><code>{"session_id":"s"}</code></pre>
+        <h2>Hook input and output</h2>
+        <h3>Common input fields</h3>
+        <table><tr><th>Field</th><th>Description</th></tr>
+          <tr><td><code>session_id</code></td><td>Current session</td></tr></table>
         """
         self.assertEqual(checker.extract_events_from_html(page, "claude"), {"SessionStart"})
         self.assertEqual(checker.extract_fields_from_html(page), {"session_id"})
@@ -144,59 +169,80 @@ class UpstreamSpecCheckerTest(unittest.TestCase):
             ):
                 diffs = checker.check_tool("claude")
 
-        self.assertEqual(diffs, [])
+        self.assertEqual({diff.category for diff in diffs}, {"unsupported_payload"})
 
-    def test_added_upstream_event_is_reported_for_every_tool(self) -> None:
-        for tool, (first, second, added) in TOOL_EVENTS.items():
+    def test_added_and_removed_upstream_events_are_reported_for_structured_surfaces(self) -> None:
+        for tool, (added_name, addition, removal) in EVENT_FIXTURES.items():
             with self.subTest(tool=tool):
-                diffs = self._check(
-                    tool,
-                    local_events=(first, second),
-                    upstream_events=(first, second, added),
-                )
-                self.assertIn("new_events", {diff.category for diff in diffs})
-                detail = next(d.detail for d in diffs if d.category == "new_events")
-                self.assertIn(added, detail)
+                fixture = (FIXTURES / f"{tool}.html").read_text()
+                baseline = checker._event_surface(fixture, tool)
+                self.assertTrue(baseline.values, baseline.reason)
+                added = checker._event_surface(fixture.replace(removal, removal + addition, 1), tool)
+                removed = checker._event_surface(fixture.replace(removal, "", 1), tool)
+                self.assertIn(added_name, added.values - baseline.values)
+                self.assertTrue(baseline.values - removed.values)
 
-    def test_removed_upstream_event_is_reported_for_every_tool(self) -> None:
-        for tool, (first, second, removed) in TOOL_EVENTS.items():
+    def test_added_and_removed_payload_fields_are_reported_for_scoped_surfaces(self) -> None:
+        for tool, (added_name, addition, removal) in PAYLOAD_FIXTURES.items():
             with self.subTest(tool=tool):
-                diffs = self._check(
-                    tool,
-                    local_events=(first, second, removed),
-                    upstream_events=(first, second),
-                )
-                self.assertIn("removed_events", {diff.category for diff in diffs})
-                detail = next(d.detail for d in diffs if d.category == "removed_events")
-                self.assertIn(removed, detail)
+                fixture = (FIXTURES / f"{tool}.html").read_text()
+                baseline = checker._payload_surface(fixture, tool)
+                self.assertTrue(baseline.values, baseline.reason)
+                added = checker._payload_surface(fixture.replace(removal, removal + addition, 1), tool)
+                removed = checker._payload_surface(fixture.replace(removal, "", 1), tool)
+                self.assertIn(added_name, added.values - baseline.values)
+                self.assertTrue(baseline.values - removed.values)
 
-    def test_added_upstream_payload_field_is_reported_for_every_tool(self) -> None:
-        for tool, (first, second, _added_event) in TOOL_EVENTS.items():
-            with self.subTest(tool=tool):
-                diffs = self._check(
-                    tool,
-                    local_events=(first, second),
-                    upstream_events=(first, second),
-                    local_fields=BASE_FIELDS,
-                    upstream_fields=(*BASE_FIELDS, "new_field"),
-                )
-                self.assertIn("new_fields", {diff.category for diff in diffs})
-                detail = next(d.detail for d in diffs if d.category == "new_fields")
-                self.assertIn("new_field", detail)
+    def test_unstructured_pages_are_reported_unsupported_instead_of_removed(self) -> None:
+        for tool in ("codex", "cline", "kiro"):
+            with self.subTest(tool=tool), patch.object(checker, "fetch_page",
+                                                       return_value=(FIXTURES / f"{tool}.html").read_text()):
+                diffs = checker.check_tool(tool)
+            categories = {diff.category for diff in diffs}
+            self.assertIn("unsupported_events", categories)
+            self.assertIn("unsupported_payload", categories)
+            self.assertFalse(any(category.startswith("removed_") for category in categories))
 
-    def test_removed_upstream_payload_field_is_reported_for_every_tool(self) -> None:
-        for tool, (first, second, _added_event) in TOOL_EVENTS.items():
-            with self.subTest(tool=tool):
-                diffs = self._check(
-                    tool,
-                    local_events=(first, second),
-                    upstream_events=(first, second),
-                    local_fields=(*BASE_FIELDS, "removed_field"),
-                    upstream_fields=BASE_FIELDS,
-                )
-                self.assertIn("removed_fields", {diff.category for diff in diffs})
-                detail = next(d.detail for d in diffs if d.category == "removed_fields")
-                self.assertIn("removed_field", detail)
+    def test_event_parser_ignores_payload_rows_and_navigation_prose(self) -> None:
+        cursor = checker._event_surface((FIXTURES / "cursor.html").read_text(), "cursor")
+        cline = checker._event_surface((FIXTURES / "cline.html").read_text(), "cline")
+        opencode_html = (FIXTURES / "opencode.html").read_text()
+        opencode = checker._event_surface(
+            opencode_html + '<h3>Plugin example</h3><pre><code>{"fake.unlisted.event": async () => {}}</code></pre>',
+            "opencode",
+        )
+        self.assertEqual(cursor.values, {"preToolUse", "sessionStart"})
+        self.assertIsNone(cline.values)
+        self.assertIn("registry", cline.reason)
+        self.assertIn("experimental.session.compacting", opencode.values)
+        self.assertNotIn("fake.unlisted.event", opencode.values)
+
+    def test_short_event_table_row_is_reported_unsupported(self) -> None:
+        html = """
+        <h2>Hook Events</h2>
+        <table>
+          <tr><th>Description</th><th>Event</th></tr>
+          <tr><td>only one cell</td></tr>
+        </table>
+        """
+        surface = checker._event_surface(html, "claude")
+        self.assertIsNone(surface.values)
+        self.assertIn("missing its event column", surface.reason)
+
+    def test_partial_payloads_are_never_reported_as_fully_checked(self) -> None:
+        claude = checker._payload_surface((FIXTURES / "claude.html").read_text(), "claude")
+        cursor = checker._payload_surface((FIXTURES / "cursor.html").read_text(), "cursor")
+        self.assertEqual(claude.values, {"session_id", "hook_event_name"})
+        self.assertIn("event-specific", claude.reason)
+        self.assertIn("event-specific", cursor.reason)
+
+    def test_payload_fields_after_escaped_table_pipes_are_kept(self) -> None:
+        fields = checker._extract_table_fields([
+            "| Event | Additional fields |",
+            "|---|---|",
+            r"| PreCompact | `trigger`: `manual\|auto`, `custom_instructions` |",
+        ])
+        self.assertEqual(fields, {"trigger", "custom_instructions"})
 
 
 if __name__ == "__main__":
