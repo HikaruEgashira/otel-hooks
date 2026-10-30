@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import html as html_lib
+import json
 import re
 import sys
 import urllib.request
@@ -36,25 +37,7 @@ UPSTREAM_URLS: dict[str, str] = {
     "kiro": "https://kiro.dev/docs/hooks/",
 }
 
-# Candidate event-name patterns for each supported tool.  These intentionally
-# match the naming convention of a tool rather than a fixed list of events so
-# that newly-added upstream events can be discovered.  The structural parsing
-# below (event tables/lists) is used first; these patterns are the fallback for
-# pages/fixtures without recognisable sections.
-EVENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
-    "claude": [re.compile(r"\b[A-Z][A-Za-z0-9]*\b")],
-    "cursor": [re.compile(r"\b[a-z][A-Za-z0-9]*\b")],
-    "codex": [re.compile(r"\b[A-Z][A-Za-z0-9]*\b")],
-    "opencode": [re.compile(r"\b[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+\b")],
-    "gemini": [re.compile(r"\b[A-Z][A-Za-z0-9]*\b")],
-    "cline": [re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b")],
-    "copilot": [re.compile(r"\b[a-z][A-Za-z0-9]*\b")],
-    "kiro": [re.compile(r"\b[A-Z][A-Za-z0-9]*\b")],
-}
-
-# A candidate must be valid for the naming convention used in the tool's event
-# tables.  This is narrower than EVENT_PATTERNS so normal prose is not treated
-# as an event when parsing Markdown/HTML tables and lists.
+# A candidate must fit the tool's event naming convention before it is accepted.
 _EVENT_STYLE_PATTERNS: dict[str, re.Pattern[str]] = {
     "claude": re.compile(r"^[A-Z][A-Za-z0-9]*$"),
     "cursor": re.compile(r"^[a-z][A-Za-z0-9]*$"),
@@ -79,20 +62,75 @@ _NON_EVENT_NAMES = frozenset({
     "TUI", "Type", "Types", "Yes",
 })
 
-_EVENT_HEADING_KEYS = frozenset({
-    "events",
-    "hook events",
-    "available events",
-    "documented hook events",
-})
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
-_QUOTED_FIELD_RE = re.compile(
-    r'"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"\s*:'
-)
 _BULLET_FIELD_RE = re.compile(
     r"^\s*[-*]\s+`?([A-Za-z_][A-Za-z0-9_.]*)`?\s*:"
 )
 _TABLE_SEPARATOR_RE = re.compile(r"^:?-{2,}:?$")
+
+# Live checks compare only documented, named regions. A tool without a stable
+# event or payload section is reported as unsupported instead of diffing page prose.
+UPSTREAM_EVENT_SECTIONS = {
+    "claude": {"hook events"},
+    "cursor": {"hook events"},
+    "codex": set(),
+    "opencode": {"events", "compaction hooks"},
+    "gemini": {"hook events"},
+    "cline": set(),
+    "copilot": {"hook events"},
+    "kiro": set(),
+}
+SNAPSHOT_EVENT_SECTIONS = {
+    "claude": {"hook events"},
+    "cursor": {"hook events"},
+    "codex": {"documented hook events"},
+    "opencode": {"available events"},
+    "gemini": {"hook events"},
+    "cline": {"hook events"},
+    "copilot": {"hook events"},
+    "kiro": {"hook events"},
+}
+UPSTREAM_PAYLOAD_SECTIONS = {
+    "claude": {"common input fields"},
+    "cursor": {"input (all hooks)"},
+    "codex": set(),
+    "opencode": set(),
+    "gemini": set(),
+    "cline": set(),
+    "copilot": {"hook event input payloads", "notification hook"},
+    "kiro": set(),
+}
+SNAPSHOT_PAYLOAD_SECTIONS = {
+    "claude": {"common input fields", "common input fields (all events)"},
+    "cursor": {"common input fields", "common input fields (all events)"},
+    "codex": set(),
+    "opencode": set(),
+    "gemini": set(),
+    "cline": set(),
+    "copilot": {
+        "payload formats (camelcase and vs code compatible pascalcase / snake_case)",
+        "per-event input schemas",
+    },
+    "kiro": set(),
+}
+UPSTREAM_UNSUPPORTED_REASONS = {
+    ("codex", "event"): "configured reference has no dedicated event list",
+    ("cline", "event"): "configured SDK page has no authoritative hook event registry",
+    ("kiro", "event"): "configured Hooks page links to a separate Hook types registry",
+    ("codex", "payload"): "configured reference has no dedicated hook payload section",
+    ("opencode", "payload"): "configured Events page has no payload field schema",
+    ("gemini", "payload"): "configured hooks page has no explicit payload field section",
+    ("cline", "payload"): "configured SDK page has no hook payload schema",
+    ("kiro", "payload"): "configured Hooks page has no payload field schema",
+}
+UPSTREAM_PARTIAL_REASONS = {
+    ("claude", "payload"): (
+        "only the common input field table is comparable; event-specific examples mix top-level and nested tool schemas"
+    ),
+    ("cursor", "payload"): (
+        "only common input fields are compared; event-specific input schemas are not extracted"
+    ),
+}
 
 
 @dataclass
@@ -100,6 +138,12 @@ class SpecDiff:
     tool: str
     category: str
     detail: str
+
+
+@dataclass
+class Surface:
+    values: set[str] | None
+    reason: str | None = None
 
 
 def fetch_page(url: str, timeout: int = 30) -> str:
@@ -122,6 +166,13 @@ def _html_to_text(raw: str) -> str:
     # Page metadata and styling are not part of the documented hook surface.
     text = re.sub(r"<!--.*?-->", " ", raw, flags=re.DOTALL)
     text = re.sub(r"<(script|style)\b[^>]*>.*?</\1\s*>", " ", text,
+                  flags=re.IGNORECASE | re.DOTALL)
+
+    def _pre_block(match: re.Match[str]) -> str:
+        content = re.sub(r"<[^>]+>", " ", match.group(1))
+        return f"\n```text\n{html_lib.unescape(content)}\n```\n"
+
+    text = re.sub(r"<pre\b[^>]*>(.*?)</pre\s*>", _pre_block, text,
                   flags=re.IGNORECASE | re.DOTALL)
 
     def _heading(match: re.Match[str]) -> str:
@@ -164,24 +215,16 @@ def _is_event_name(token: str, tool: str) -> bool:
 
 
 def _section_title_key(title: str) -> str:
-    # Drop parenthetical counts such as "(33 total)".
-    return re.sub(r"\s*\([^)]*\)\s*", " ", title).strip().lower()
-
-
-def _is_event_section_title(title: str) -> bool:
-    key = _section_title_key(title)
-    if key in _EVENT_HEADING_KEYS:
-        return True
-    return (
-        "event" in key
-        and ("hook" in key or "available" in key)
-    )
+    # Drop numeric section counts without erasing meaningful labels like "(all hooks)".
+    title = title.replace("\u200b", "")
+    title = re.sub(r"\s*\(\d+[^)]*\)", "", title).strip().lower()
+    return " ".join(title.split())
 
 
 def _table_cells(line: str) -> list[str]:
     if "|" not in line:
         return []
-    cells = [cell.strip() for cell in line.split("|")]
+    cells = [cell.strip().replace(r"\|", "|") for cell in re.split(r"(?<!\\)\|", line)]
     # Leading/trailing pipes produce empty edge cells.
     while cells and not cells[0]:
         cells.pop(0)
@@ -209,74 +252,154 @@ def _iter_sections(lines: list[str]) -> list[tuple[int, str, list[str]]]:
     return sections
 
 
-def _extract_events_from_lines(lines: list[str], tool: str) -> set[str]:
-    """Extract event names from tables, lists, and nested headings."""
-    events: set[str] = set()
+def _event_tokens(value: str, tool: str, table_label: bool = False) -> set[str]:
+    """Read event identifiers only when a cell or heading presents them as code."""
+    value = value.replace("\u200b", "")
+    candidates = re.findall(r"`([^`]+)`", value)
+    if not candidates:
+        candidates = [part.strip() for part in re.split(r"\s*/\s*", value.strip().strip("|*_ "))]
+    if table_label and tool == "copilot":
+        candidates = [
+            (parts[0].lower() + "".join(word.title() for word in parts[1:])) if len(parts) > 1 else candidate
+            for candidate in candidates
+            if (parts := candidate.split()) and all(re.fullmatch(r"[A-Za-z]+", word) for word in parts)
+        ]
+    events = set()
+    for candidate in candidates:
+        for part in re.split(r"\s*/\s*", candidate.strip()):
+            token = part.strip("`*_ ")
+            if _is_event_name(token, tool):
+                events.add(token)
+    return events
 
+
+def _events_in_lines(lines: list[str], tool: str, heading_level: int,
+                     allow_lists: bool = False) -> set[str]:
+    events: set[str] = set()
+    event_column = None
     for line in lines:
         cells = _table_cells(line)
         if cells:
-            token = _clean_token(cells[0])
-            if _is_event_name(token, tool):
-                events.add(token)
-
+            headers = [re.sub(r"[^a-z ]", "", cell.lower()).strip() for cell in cells]
+            header_column = next((i for i, value in enumerate(headers)
+                                  if value in {"event", "event name", "hook event", "hook event name"}), None)
+            if header_column is not None:
+                event_column = header_column
+                continue
+            if all(_TABLE_SEPARATOR_RE.match(cell) for cell in cells if cell):
+                continue
+            if any(value in {"field", "input field", "output field", "property", "type"}
+                   for value in headers):
+                event_column = None
+                continue
+            if event_column is not None:
+                if event_column >= len(cells):
+                    raise ValueError("event table row is missing its event column")
+                values = _event_tokens(cells[event_column], tool, table_label=True)
+                if not values:
+                    raise ValueError("event table contains a row without a parseable identifier")
+                events.update(values)
+            continue
+        if not line.strip():
+            continue
+        event_column = None
         heading = _HEADING_RE.match(line)
-        if heading:
-            token = _clean_token(heading.group(2))
-            if _is_event_name(token, tool):
-                events.add(token)
-        elif line.lstrip().startswith(("-", "*")):
-            content = line.lstrip()[1:].strip()
-            token = _clean_token(content)
-            if _is_event_name(token, tool):
-                events.add(token)
-
+        if heading and len(heading.group(1)) == heading_level:
+            events.update(_event_tokens(heading.group(2), tool))
+        elif allow_lists and line.lstrip().startswith(("-", "*")):
+            events.update(_event_tokens(line.lstrip()[1:].strip(), tool))
     return events
 
 
-def _extract_events_from_sections(text: str, tool: str) -> set[str]:
-    lines = text.splitlines()
-    events: set[str] = set()
-    for _level, title, body in _iter_sections(lines):
-        if _is_event_section_title(title):
-            events.update(_extract_events_from_lines(body, tool))
-    return events
+def _surface(text: str, tool: str, sections: dict[str, set[str]],
+             parser, surface_name: str) -> Surface:
+    wanted = sections.get(tool)
+    if not wanted:
+        reason = UPSTREAM_UNSUPPORTED_REASONS.get((tool, surface_name),
+                                                   f"no configured {surface_name} section")
+        return Surface(None, reason)
+    matches = [(level, title, body) for level, title, body in _iter_sections(text.splitlines())
+               if _section_title_key(title) in wanted]
+    if not matches:
+        return Surface(None, f"no recognized {surface_name} section")
+    try:
+        values = parser(matches, tool)
+    except ValueError as error:
+        return Surface(None, str(error))
+    if not values:
+        return Surface(None, f"recognized {surface_name} section contained no parseable fields")
+    return Surface(values)
 
 
-def _extract_broad_events(text: str, tool: str) -> set[str]:
-    events: set[str] = set()
-    for pattern in EVENT_PATTERNS[tool]:
-        events.update(pattern.findall(text))
-    return {event for event in events if event not in _NON_EVENT_NAMES}
+def _event_surface(html: str, tool: str, snapshot: bool = False) -> Surface:
+    text = html if snapshot else _html_to_text(html)
+    sections = SNAPSHOT_EVENT_SECTIONS if snapshot else UPSTREAM_EVENT_SECTIONS
+
+    def parse(matches, name):
+        events: set[str] = set()
+        for level, title, body in matches:
+            events.update(_events_in_lines(body, name, level + 1, allow_lists=name == "opencode"))
+            if name == "opencode" and _section_title_key(title) == "compaction hooks":
+                source = "\n".join(body)
+                for token in re.findall(r"[\"']([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)[\"']\s*:", source):
+                    if _is_event_name(token, name):
+                        events.add(token)
+        return events
+
+    return _surface(text, tool, sections,
+                    parse, "event")
+
+
+def _payload_surface(text: str, tool: str, snapshot: bool = False) -> Surface:
+    sections = SNAPSHOT_PAYLOAD_SECTIONS if snapshot else UPSTREAM_PAYLOAD_SECTIONS
+
+    source = text if snapshot else _html_to_text(text)
+    matches = [(level, title, body) for level, title, body in _iter_sections(source.splitlines())
+               if _section_title_key(title) in sections.get(tool, set())]
+    if not matches:
+        reason = UPSTREAM_UNSUPPORTED_REASONS.get((tool, "payload"), "no recognized payload section")
+        return Surface(None, reason)
+
+    def parse(matches, _tool):
+        values: set[str] = set()
+        for level, title, body in matches:
+            key = _section_title_key(title)
+            if tool == "claude" and not snapshot:
+                # The common-field table is the comparable surface; event
+                # examples also contain arbitrary nested tool-input schemas.
+                values.update(_extract_table_fields(body))
+            elif tool == "copilot" and snapshot and key.startswith("payload formats"):
+                common = re.search(r"```[^\n]*\n(.*?)```", "\n".join(body), re.DOTALL)
+                if common:
+                    values.update(_extract_fields_from_text(f"```json\n{common.group(1)}\n```"))
+                values.update(_extract_table_fields(body))
+            else:
+                values.update(_extract_payload_fields_from_text(
+                    "\n".join(body),
+                ))
+        return values
+
+    try:
+        values = parse(matches, tool)
+    except ValueError as error:
+        return Surface(None, str(error))
+    if not values:
+        return Surface(None, "recognized payload section contained no parseable fields")
+    partial_reason = UPSTREAM_PARTIAL_REASONS.get((tool, "payload")) if not snapshot else None
+    return Surface(values, partial_reason)
 
 
 def extract_events_from_html(html: str, tool: str) -> set[str]:
-    """Extract hook event names from upstream HTML (or a Markdown fixture)."""
-    text = _html_to_text(html)
-    events = _extract_events_from_sections(text, tool)
-    if events:
-        return events
-
-    # No recognisable "Hook Events"/"Available Events" section.  Try a
-    # structural scan first, then fall back to tokens for small fixtures.
-    events = _extract_events_from_lines(text.splitlines(), tool)
-    if events:
-        return events
-    return _extract_broad_events(text, tool)
+    """Extract identifiers from the tool's explicitly named event section."""
+    result = _event_surface(html, tool)
+    return result.values or set()
 
 
 def extract_events_from_spec(spec_path: Path, tool: str | None = None) -> set[str]:
     """Extract hook event names from our local spec markdown."""
-    text = spec_path.read_text()
     tool = tool or tool_name_from_path(spec_path)
-    events = _extract_events_from_sections(text, tool)
-    if events:
-        return events
-
-    events = _extract_events_from_lines(text.splitlines(), tool)
-    if events:
-        return events
-    return _extract_broad_events(text, tool)
+    result = _event_surface(spec_path.read_text(), tool, snapshot=True)
+    return result.values or set()
 
 
 def tool_name_from_path(spec_path: Path) -> str:
@@ -292,6 +415,8 @@ def _extract_table_fields(lines: list[str]) -> set[str]:
     for line in lines:
         cells = _table_cells(line)
         if not cells:
+            if not line.strip():
+                continue
             header = None
             continue
 
@@ -303,20 +428,37 @@ def _extract_table_fields(lines: list[str]) -> set[str]:
             header = [cell.lower() for cell in cells]
             continue
 
-        if any(
-            marker in cell
-            for cell in header
-            for marker in ("field", "parameter", "property")
-        ):
-            token = _clean_token(cells[0])
+        header_keys = [re.sub(r"[^a-z ]", "", cell).strip() for cell in header]
+        field_column = next((index for index, key in enumerate(header_keys)
+                             if key in {"field", "field name", "input field", "output field",
+                                        "parameter", "property", "property name"}), None)
+        if field_column is not None and field_column < len(cells):
+            token = _clean_token(cells[field_column])
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", token):
                 fields.add(token)
+            continue
+
+        additional_column = next((index for index, key in enumerate(header_keys)
+                                  if key in {"additional fields", "input fields"}), None)
+        if additional_column is not None and additional_column < len(cells):
+            value = cells[additional_column]
+            for match in re.finditer(r"`([A-Za-z_][A-Za-z0-9_.]*)`", value):
+                before = value[:match.start()].rstrip()
+                after = value[match.end():].lstrip()
+                if before.endswith(":"):
+                    continue
+                if not after or after.startswith((",", ":", "(")):
+                    fields.add(match.group(1))
 
     return fields
 
 
 def _extract_fields_from_text(text: str) -> set[str]:
-    fields = set(_QUOTED_FIELD_RE.findall(text))
+    fields: set[str] = set()
+    code_blocks = re.findall(r"```[^\n]*\n(.*?)```", text, re.DOTALL)
+    code_blocks.extend(re.findall(r"`([^`]*[{}][^`]*)`", text, re.DOTALL))
+    for block in code_blocks:
+        fields.update(_top_level_object_fields(block))
     for line in text.splitlines():
         match = _BULLET_FIELD_RE.match(line)
         if match:
@@ -325,14 +467,99 @@ def _extract_fields_from_text(text: str) -> set[str]:
     return fields
 
 
+def _top_level_object_fields(block: str) -> set[str]:
+    """Read only keys at the root of a JSON or TypeScript-like object example."""
+    start = block.find("{")
+    end = block.rfind("}")
+    if start < 0 or end < start:
+        return set()
+    candidate = block[start:end + 1]
+    try:
+        value = json.loads(candidate)
+    except json.JSONDecodeError:
+        value = None
+    if isinstance(value, dict):
+        return {key for key in value if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", key)}
+
+    fields: set[str] = set()
+    depth = 0
+    index = 0
+    while index < len(candidate):
+        char = candidate[index]
+        if char in {"\"", "'"}:
+            quote = char
+            end = index + 1
+            escaped = False
+            while end < len(candidate):
+                if escaped:
+                    escaped = False
+                elif candidate[end] == "\\":
+                    escaped = True
+                elif candidate[end] == quote:
+                    break
+                end += 1
+            key = candidate[index + 1:end]
+            after = end + 1
+            while after < len(candidate) and candidate[after].isspace():
+                after += 1
+            if depth == 1 and after < len(candidate) and candidate[after] == ":":
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", key):
+                    fields.add(key)
+            index = end + 1
+            continue
+        if char == "{":
+            depth += 1
+            index += 1
+            continue
+        if char == "}":
+            depth = max(0, depth - 1)
+            index += 1
+            continue
+        if depth == 1 and re.match(r"[A-Za-z_]", char):
+            end = index + 1
+            while end < len(candidate) and re.match(r"[A-Za-z0-9_.]", candidate[end]):
+                end += 1
+            after = end
+            while after < len(candidate) and candidate[after].isspace():
+                after += 1
+            if after < len(candidate) and candidate[after] == "?":
+                after += 1
+                while after < len(candidate) and candidate[after].isspace():
+                    after += 1
+            if after < len(candidate) and candidate[after] == ":":
+                fields.add(candidate[index:end])
+            index = end
+            continue
+        index += 1
+    return fields
+
+
+def _extract_payload_fields_from_text(text: str) -> set[str]:
+    """Extract input fields while excluding clearly marked output examples."""
+    selected: list[str] = []
+    in_output = False
+    for line in text.splitlines():
+        heading = _HEADING_RE.match(line)
+        if heading and len(heading.group(1)) >= 3:
+            in_output = False
+        if re.match(r"^\s*(?:#{1,6}\s*)?Output(?:\s*\([^)]*\))?\s*:",
+                    line, re.IGNORECASE):
+            in_output = True
+        if not in_output:
+            selected.append(line)
+    return _extract_fields_from_text("\n".join(selected))
+
+
 def extract_json_fields_from_spec(spec_path: Path) -> set[str]:
-    """Extract payload field names from JSON examples and field lists."""
-    return _extract_fields_from_text(spec_path.read_text())
+    """Extract payload field names from explicitly named snapshot sections."""
+    result = _payload_surface(spec_path.read_text(), tool_name_from_path(spec_path), snapshot=True)
+    return result.values or set()
 
 
-def extract_fields_from_html(html: str) -> set[str]:
-    """Extract payload field names from upstream HTML/Markdown."""
-    return _extract_fields_from_text(_html_to_text(html))
+def extract_fields_from_html(html: str, tool: str = "claude") -> set[str]:
+    """Extract payload field names only from explicitly named payload sections."""
+    result = _payload_surface(html, tool)
+    return result.values or set()
 
 
 def _apply_diff(
@@ -380,29 +607,22 @@ def check_tool(tool: str) -> list[SpecDiff]:
         diffs.append(SpecDiff(tool, "fetch", f"Failed to fetch {url}: {e}"))
         return diffs
 
-    spec_text = spec_path.read_text()
-    local_events = extract_events_from_spec(spec_path, tool)
-    upstream_events = extract_events_from_html(html, tool)
-
-    # For broad fallback extraction, remove tokens that already occur as
-    # non-event prose in the local snapshot.  This keeps simple fixtures useful
-    # without turning ordinary prose changes into event-drift reports.
-    upstream_text = _html_to_text(html)
-    if not _extract_events_from_sections(upstream_text, tool):
-        local_noise = _extract_broad_events(spec_text, tool) - local_events
-        upstream_events -= local_noise
-
-    _apply_diff(
-        diffs, tool, upstream_events, local_events,
-        "new_events", "removed_events", "events",
-    )
-
-    local_fields = extract_json_fields_from_spec(spec_path)
-    upstream_fields = extract_fields_from_html(html)
-    _apply_diff(
-        diffs, tool, upstream_fields, local_fields,
-        "new_fields", "removed_fields", "payload fields",
-    )
+    for name, upstream, local, added, removed, label in (
+        ("events", _event_surface(html, tool), _event_surface(spec_path.read_text(), tool, snapshot=True),
+         "new_events", "removed_events", "events"),
+        ("payload", _payload_surface(html, tool),
+         _payload_surface(spec_path.read_text(), tool, snapshot=True),
+         "new_fields", "removed_fields", "payload fields"),
+    ):
+        if upstream.reason or local.reason:
+            reason = upstream.reason or local.reason
+            diffs.append(SpecDiff(tool, f"unsupported_{name}", reason or "surface unavailable"))
+            if upstream.values is not None and local.values is not None:
+                _apply_diff(diffs, tool, upstream.values, local.values,
+                            added, removed, label)
+            continue
+        _apply_diff(diffs, tool, upstream.values or set(), local.values or set(),
+                    added, removed, label)
 
     if not diffs:
         print(f"  {tool}: OK (no drift detected)")
@@ -433,12 +653,13 @@ def main() -> int:
         return 0
 
     print(f"\n{'='*60}")
-    print(f"Found {len(all_diffs)} difference(s):\n")
+    print(f"Found {len(all_diffs)} difference(s) or unsupported surface(s):\n")
     for d in all_diffs:
         icon = {
             "new_events": "+", "removed_events": "-",
             "new_fields": "+", "removed_fields": "-",
             "fetch": "!", "missing": "?", "config": "?",
+            "unsupported_events": "?", "unsupported_payload": "?",
         }.get(d.category, "~")
         print(f"  [{icon}] {d.tool}/{d.category}: {d.detail}")
 

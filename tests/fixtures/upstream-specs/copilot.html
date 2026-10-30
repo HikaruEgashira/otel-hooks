@@ -1,0 +1,33 @@
+<!-- Minimal excerpt from the cached GitHub Copilot hooks page. -->
+<h2>Hook events</h2>
+<table><tr><th>Event</th><th>Fires when</th></tr>
+<tr><td><code>sessionStart</code></td><td>A new session starts</td></tr>
+<tr><td><code>post Tool Use Failure</code></td><td>A tool fails</td></tr></table>
+<h2>Hook event input payloads</h2>
+<h3>subagentStop / SubagentStop</h3>
+<p>camelCase input:</p>
+<pre><code>{
+  sessionId: string;
+  timestamp: number;
+  cwd: string;
+  transcriptPath: string;
+  agentName: string;
+  agentDisplayName?: string;
+  agentDescription?: string;
+}</code></pre>
+<p>VS Code compatible input:</p>
+<pre><code>{
+  hook_event_name: "SubagentStop";
+  session_id: string;
+  timestamp: string;
+  cwd: string;
+  transcript_path: string;
+  agent_id: string;
+  agent_type: string;
+  agent_name: string;
+  agent_display_name?: string;
+  last_assistant_message: string; // The <code>response</code> text
+  stop_reason: "end_turn";
+}</code></pre>
+<p>Output:</p>
+<pre><code>{ "stopReason": "end_turn" }</code></pre>
