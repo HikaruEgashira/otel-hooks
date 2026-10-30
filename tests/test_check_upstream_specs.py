@@ -119,6 +119,17 @@ class UpstreamSpecCheckerTest(unittest.TestCase):
             {"session_id", "new_field"},
         )
 
+    def test_html_non_content_does_not_create_spec_drift(self) -> None:
+        page = """
+        <SCRIPT type="application/json">{"analytics_id": 1}</SCRIPT>
+        <style>body:after { content: '{"theme_id":1}'; }</style>
+        <!-- <h2>Hook Events</h2><h3>GhostEvent</h3>{"comment_id":1} -->
+        <h2>Hook Events</h2><h3>SessionStart</h3>
+        <h2>Payload</h2><pre><code>{"session_id":"s"}</code></pre>
+        """
+        self.assertEqual(checker.extract_events_from_html(page, "claude"), {"SessionStart"})
+        self.assertEqual(checker.extract_fields_from_html(page), {"session_id"})
+
     def test_snapshot_metadata_does_not_affect_drift_detection(self) -> None:
         events = ("SessionStart", "Stop")
         with tempfile.TemporaryDirectory() as td:
