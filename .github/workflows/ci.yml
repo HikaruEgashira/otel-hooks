@@ -9,7 +9,7 @@ permissions: {}
 jobs:
   test:
     timeout-minutes: 10
-    runs-on: hikae-2vcpu-ubuntu-2404-arm
+    runs-on: hikae-2vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:

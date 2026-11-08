@@ -11,7 +11,7 @@ permissions: {}
 jobs:
   analyze:
     timeout-minutes: 5
-    runs-on: hikae-2vcpu-ubuntu-2404-arm
+    runs-on: hikae-2vcpu-ubuntu-2404
     permissions:
       contents: read
       security-events: write
