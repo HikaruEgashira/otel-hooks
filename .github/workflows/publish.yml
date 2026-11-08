@@ -6,7 +6,7 @@ permissions: {}
 jobs:
   build:
     timeout-minutes: 5
-    runs-on: hikae-2vcpu-ubuntu-2404-arm
+    runs-on: hikae-2vcpu-ubuntu-2404
     permissions: {}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,7 +40,7 @@ jobs:
   release:
     needs: publish
     timeout-minutes: 5
-    runs-on: hikae-2vcpu-ubuntu-2404-arm
+    runs-on: hikae-2vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:
